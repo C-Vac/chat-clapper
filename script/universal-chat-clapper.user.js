@@ -3,7 +3,7 @@
 // @namespace    http://tampermonkey.net/
 // @version      0.4
 // @description  Clap goofy chatters on multiple sites using dynamic config from GM_getValue
-// @match        *://*/* // Runs everywhere initially to check config, might need refinement based on performance
+// @match        *://*/*
 // @grant        GM_getValue
 // @grant        GM_setValue
 // ==/UserScript==
@@ -11,9 +11,9 @@
 (function () {
     'use strict';
 
-    const CONFIG_KEY = 'modClapperConfig'; // Key used to store/retrieve the config object
+    const CONFIG_KEY = 'chatClapperConfig'; // Key used to store/retrieve the config object
 
-    console.log("------- Universal Mod Clapper v4 Activated -------");
+    console.log("------- Universal Chat Clapper v4 Activated -------");
 
     // --- Load Config ---
     let config = {};
@@ -94,7 +94,7 @@
         if (chatContainer) {
             console.log(`[SUCCESS] Found "${containerSelector}" after ${checkAttempts} attempts. Initializing observer.`);
             clearInterval(waitForChatInterval);
-            initializeModClapper(chatContainer, usersToBlock, selectors, replacementText, delaySeconds);
+            initializeChatClapper(chatContainer, usersToBlock, selectors, replacementText, delaySeconds);
         } else if (checkAttempts > maxAttempts) {
             clearInterval(waitForChatInterval);
             console.error(`[FAIL] Couldn't find chat container "${containerSelector}" after ${maxWaitSeconds} seconds. Script stopping for this page.`);
@@ -103,7 +103,7 @@
 
 
     // --- Initialize the Observer Logic ---
-    function initializeModClapper(chatContainer, users, selectors, replaceWith, delaySec) {
+    function initializeChatClapper(chatContainer, users, selectors, replaceWith, delaySec) {
         console.log("[INFO] Attaching MutationObserver.");
 
         const observer = new MutationObserver(mutations => {
