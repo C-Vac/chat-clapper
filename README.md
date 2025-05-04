@@ -1,4 +1,4 @@
-# 🎤 Chat Clapper 👏🏿
+# 🎤 Chat Clapper 3000 👏🏿
 
 Yo! This project is a dynamic Tampermonkey userscript system designed to automatically clap back (replace) messages from specified users on configured chat websites. It features a local configuration UI to manage target sites, users, CSS selectors, and global settings without needing to edit the script code directly.
 
