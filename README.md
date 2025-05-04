@@ -8,27 +8,26 @@ Keepin' it 💯 since Saturday, May 3, 2025. Straight out tha Goblinverse
 
 This whole operation is split into two main hustles: the script itself and the UI to boss it around.
 
-/chat-clapper/
-│
-├── script/         <-- The brains: Tampermonkey script & testing lab
-│   ├── chat-clapper.user.js  # The actual userscript file to install
-│   ├── tests/                # Test files, mocks, sample data
-│   │   ├── fixtures/         # Sample configs (config.dev.json), HTML snippets (.txt)
-│   │   ├── mocks/            # Fake GM_API, etc. for testing outside browser
-│   │   └── *.test.ts         # Test files (using Vitest)
-│   ├── package.json          # Node.js dev dependencies for testing (Vitest, JSDOM)
-│   ├── tsconfig.json         # TypeScript config for tests
-│   └── vitest.config.ts      # Vitest config (uses JSDOM environment)
-│
-├── ui/             <-- The face: Local config UI (Vite + React + TS)
-│   ├── src/                  # React source code (components, services...)
-│   │   └── services/         # configService.ts handles loading/saving (mocks for dev)
-│   ├── vite.config.ts        # Vite config
-│   ├── package.json          # Node.js dependencies for the UI build/dev server
-│   └── ...                   # Standard Vite/React project files
-│
-└── README.md       <-- You are here, playa!
-
+/chat-clapper/<br />
+│<br />
+├── script/         <-- The brains: Tampermonkey script & testing lab<br />
+│   ├── chat-clapper.user.js  # The actual userscript file to install<br />
+│   ├── tests/                # Test files, mocks, sample data<br />
+│   │   ├── fixtures/         # Sample configs (config.dev.json), HTML snippets <br />(.txt)<br />
+│   │   ├── mocks/            # Fake GM_API, etc. for testing outside browser<br />
+│   │   └── *.test.ts         # Test files (using Vitest)<br />
+│   ├── package.json          # Node.js dev dependencies for testing (Vitest, JS<br />DOM)<br />
+│   ├── tsconfig.json         # TypeScript config for tests<br />
+│   └── vitest.config.ts      # Vitest config (uses JSDOM environment)<br />
+│<br />
+├── ui/             <-- The face: Local config UI (Vite + React + TS)<br />
+│   ├── src/                  # React source code (components, services...)<br />
+│   │   └── services/         # configService.ts handles loading/saving (mocks f<br />or dev)<br />
+│   ├── vite.config.ts        # Vite config<br />
+│   ├── package.json          # Node.js dependencies for the UI build/dev server<br />
+│   └── ...                   # Standard Vite/React project files<br />
+│<br />
+└── README.md       <-- You are here, playa!<br />
 
 ## 🛠️ Development Setup & Workflow
 
