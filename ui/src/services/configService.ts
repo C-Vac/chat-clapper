@@ -9,79 +9,114 @@ declare global {
         chatClapper_isGmReady?: boolean;
     }
 }
+// --- Type Definitions ---
+// Define the structure of the configuration object
+// (These should match the types expected by the userscript and UI)
+export type Selector = {
+  container: string;
+  author: string;
+  content: string;
+};
 
-// --- Define the structure Types (duplicate from prompt for clarity) ---
-interface Config {
-    global: GlobalSettings;
-    sites: Record<string, SiteConfig>;
-}
-interface GlobalSettings {
-    replacementText: string;
-    delaySeconds: number;
-}
-interface SiteConfig {
-    label?: string;
-    users: string[];
-    selectors: { container: string; author: string; content: string; };
-}
+export type Site = {
+  label?: string; // Optional display name
+  users: string[]; // List of usernames to block
+  selectors: Selector;
+};
+
+export type Config = {
+  global: {
+     replacementText: string; // Text to replace blocked messages with
+     delaySeconds: number; // Delay before replacing message
+  }
+  sites: Record<string, Site>; // Key is the URL pattern string
+};
 // --- End Types ---
 
+// Internal constant for the storage key - not exposed to the UI component
 const CONFIG_KEY = 'chatClapperConfig';
 
+// Default configuration structure
 const DEFAULT_CONFIG: Config = {
-  global: { replacementText: "[Message Clapped by User]", delaySeconds: 3 },
-  sites: {}
+  global: {
+    replacementText: "[Message Clapped by Goblin]",
+    delaySeconds: 3
+  },
+  sites: {} // Start with no sites configured
 };
 
-// --- Check GM Readiness (Updated) ---
 export const checkGmReady = (): boolean => {
-  console.log(`UI checkGmReady: Checking window.chatClapper_isGmReady = ${window.chatClapper_isGmReady}`);
-  // Check the flag set by the userscript OR check the functions directly on window
-  return window.chatClapper_isGmReady === true ||
-         (typeof window.chatClapper_GM_getValue === 'function' &&
-          typeof window.chatClapper_GM_setValue === 'function');
+  // Prefer checking the explicit flag set by the userscript bridge,
+  // otherwise check for the functions themselves.
+  const ready = typeof window !== 'undefined' &&
+                (window.chatClapper_isGmReady === true ||
+                 (typeof window.chatClapper_GM_getValue === 'function' &&
+                  typeof window.chatClapper_GM_setValue === 'function'));
+
+  console.log(`ConfigService: checkGmReady() result = ${ready}`);
+  return ready;
 };
 
-// --- Load Config Function (Updated) ---
-export const loadConfig = async (): Promise<Config> => {
-  console.log("ConfigService: Attempting to load config using bridged functions...");
-  // Ensure checkGmReady is true before calling this, or handle potential errors
-  if (!checkGmReady() || !window.chatClapper_GM_getValue) {
-      console.warn("ConfigService: Bridged GM functions not ready. Returning defaults.");
-      return JSON.parse(JSON.stringify(DEFAULT_CONFIG));
+/**
+ * Loads the entire configuration object from userscript storage.
+ * Assumes the underlying bridged GM_getValue function exists.
+ * Returns the loaded config or a default config if not found or on error.
+ * @returns {Promise<Config>} The loaded or default configuration object.
+ */
+export const getConfig = async (): Promise<Config> => {
+  console.log("ConfigService: getConfig() called.");
+
+  // Check if the required bridged function exists on window
+  if (typeof window.chatClapper_GM_getValue !== 'function') {
+      const errorMsg = "ConfigService: FATAL - Bridged function window.chatClapper_GM_getValue not found!";
+      console.error(errorMsg);
+      throw new Error(errorMsg);
   }
 
   try {
-    // Use the bridged function attached to window
+    // Call the bridged function, providing the specific key and a default value (null)
     const storedValue = await window.chatClapper_GM_getValue(CONFIG_KEY, null);
 
+    // Basic validation of the loaded structure
     if (storedValue === null || typeof storedValue !== 'object' || !storedValue.global || !storedValue.sites) {
-      console.warn("ConfigService: No valid config found via bridged function or structure mismatch. Initializing with defaults.");
+      console.warn("ConfigService: No valid config found in storage or structure mismatch. Returning defaults.");
+      // Return a deep copy of the default config
       return JSON.parse(JSON.stringify(DEFAULT_CONFIG));
     } else {
-      console.log("ConfigService: Valid config loaded via bridged function:", storedValue);
+      console.log("ConfigService: Valid config loaded:", storedValue);
+      // Return the validated, stored config
       return storedValue as Config;
     }
   } catch (e) {
-    console.error("ConfigService: Error during config load via bridged function, returning defaults.", e);
+    console.error("ConfigService: Error during getConfig execution:", e);
+    // Return a deep copy of the default config on any error during the async call
     return JSON.parse(JSON.stringify(DEFAULT_CONFIG));
   }
 };
 
-// --- Save Config Function (Updated) ---
-export const saveConfig = async (configObject: Config): Promise<void> => {
-  console.log("ConfigService: Attempting to save config using bridged functions...", configObject);
-   // Ensure checkGmReady is true before calling this, or handle potential errors
-  if (!checkGmReady() || !window.chatClapper_GM_setValue) {
-       console.error("ConfigService: Bridged GM functions not ready. Cannot save.");
-       return; // Or throw an error
+/**
+ * Saves the entire configuration object to userscript storage.
+ * Assumes the underlying bridged GM_setValue function exists.
+ * @param {Config} configObject - The complete configuration object to save.
+ * @returns {Promise<void>}
+ */
+export const setConfig = async (configObject: Config): Promise<void> => {
+  console.log("ConfigService: setConfig() called with:", configObject);
+
+   // Check if the required bridged function exists on window
+   if (typeof window.chatClapper_GM_setValue !== 'function') {
+       const errorMsg = "ConfigService: FATAL - Bridged function window.chatClapper_GM_setValue not found! Cannot save.";
+       console.error(errorMsg);
+       throw new Error(errorMsg);
   }
 
   try {
-    // Use the bridged function attached to window
+    // Call the bridged function with the specific key and the config object
     await window.chatClapper_GM_setValue(CONFIG_KEY, configObject);
-    console.log("ConfigService: Config saved successfully via bridged function.");
+    console.log("ConfigService: Config saved successfully.");
   } catch (e) {
-    console.error("ConfigService: Error saving config via bridged function.", e);
+    console.error("ConfigService: Error during setConfig execution:", e);
+    // Rethrow or handle as needed
+    // throw e;
   }
 };
