@@ -331,7 +331,7 @@
 
         dispatchEvent(eventName, detail) {
             try {
-                Logger.action(`Dispatching event "${eventName}"`);
+                Logger.debug(`Dispatching event "${eventName}"`);
                 const event = new CustomEvent(eventName, { detail });
                 window.dispatchEvent(event);
             } catch (error) {
