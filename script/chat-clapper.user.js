@@ -1,9 +1,10 @@
 // ==UserScript==
-// @name         Chat Clapper v4 (Dynamic Config)
+// @name         Chat Clapper 3000
 // @namespace    http://tampermonkey.net/
 // @version      0.4
 // @description  Clap goofy chatters on multiple sites using dynamic config from GM_getValue
 // @match        *://*/*
+// @match        http://localhost:5173/
 // @grant        GM_getValue
 // @grant        GM_setValue
 // ==/UserScript==
