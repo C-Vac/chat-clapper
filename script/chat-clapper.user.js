@@ -1,5 +1,5 @@
 // ==UserScript==
-// @name         Universal Chat Clapper v4 (Dynamic Config)
+// @name         Chat Clapper v4 (Dynamic Config)
 // @namespace    http://tampermonkey.net/
 // @version      0.4
 // @description  Clap goofy chatters on multiple sites using dynamic config from GM_getValue
@@ -13,7 +13,7 @@
 
     const CONFIG_KEY = 'chatClapperConfig'; // Key used to store/retrieve the config object
 
-    console.log("------- Universal Chat Clapper v4 Activated -------");
+    console.log("------- Chat Clapper v4 Activated -------");
 
     // --- Load Config ---
     let config = {};
