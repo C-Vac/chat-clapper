@@ -20,20 +20,32 @@ export interface DashboardProps {
 }
 // --- End Props Definition ---
 
+// Define the structure for our component list
+interface AppComponentEntry {
+  component: React.FC<DashboardProps>;
+  filename: string; // Store the filename here
+}
 
-// --- Component Selection Logic ---
-// Choose which component to render (0-indexed)
-// IMPORTANT: Make sure the index is valid for the Apps array!
-const selection: number = 0; // Example: Render BaselineA
-const Apps: React.FC<DashboardProps>[] = [
-  BaselineA,
-  BaselineB,
-  ModelA,
-  ModelB,
-  ModelC
+// Store components along with their filenames
+const Apps: AppComponentEntry[] = [
+  { component: BaselineA, filename: 'BaselineA.tsx' },
+  { component: BaselineB, filename: 'BaselineB.tsx' },
+  { component: ModelA, filename: 'ModelA.tsx' },
+  { component: ModelB, filename: 'ModelB.tsx' },
+  { component: ModelC, filename: 'ModelC.tsx' }
 ];
-// Check if selection is valid, otherwise default to the first one or handle error
-const SelectedAppComponent = Apps[selection] || Apps[0];
+
+// Choose which component to render (0-indexed)
+const selection: number = 0; // Example: Render BaselineA
+
+// Get the selected entry (component + filename)
+// Add validation to prevent out-of-bounds access
+const selectedEntry = (selection >= 0 && selection < Apps.length)
+  ? Apps[selection]
+  : Apps[0]; // Default to the first entry if selection is invalid
+
+const SelectedAppComponent = selectedEntry.component;
+const selectedFilename = selectedEntry.filename;
 // --- End Selection Logic ---
 
 
@@ -41,6 +53,8 @@ const App: React.FC = () => {
   const [isGmReady, setIsGmReady] = useState(false);
   const [fileUrl, setFileUrl] = useState("");
   const [isLoading, setIsLoading] = useState(true);
+  // State for the selected component index
+  const [selectedIndex, setSelectedIndex] = useState<number>(0); // Default to first component
 
   useEffect(() => {
     const ready = checkGmReady();
@@ -60,6 +74,17 @@ const App: React.FC = () => {
       console.log("UI: Bridged GM functions detected via configService. Ready for configuration.");
     }
   }, []);
+
+  // Get the currently selected component based on state
+  const SelectedAppComponent = Apps[selectedIndex]?.component || Apps[0].component; // Fallback to first
+
+  // Handler for dropdown change
+  const handleSelectionChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
+    const newIndex = parseInt(event.target.value, 10);
+    if (!isNaN(newIndex) && newIndex >= 0 && newIndex < Apps.length) {
+      setSelectedIndex(newIndex);
+    }
+  };
 
   // Setup Instructions Component (remains the same as before)
   const SetupInstructions = () => (
@@ -90,10 +115,27 @@ const App: React.FC = () => {
     </div>
   );
 
-  // ConfigUI now renders the selected component and passes props
   const ConfigUI = () => (
-    <div style={{ padding: "20px" }}>
-      <h1>Chat Clapper Configurator (Testing: {SelectedAppComponent.name || `App ${selection}`})</h1>
+    <div id="dashboard">
+      {/* Dropdown Selector */}
+      <div style={{ marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+        <label htmlFor="app-selector" style={{ fontWeight: 'bold' }}>Select Test Component:</label>
+        <select
+          id="app-selector"
+          value={selectedIndex}
+          onChange={handleSelectionChange}
+          style={{ padding: '8px', borderRadius: '4px', border: '1px solid #ccc' }}
+        >
+          {Apps.map((appEntry, index) => (
+            <option key={index} value={index}>
+              {appEntry.filename}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      <hr style={{ marginBottom: '20px' }} />
+
       {/* Render the selected component, passing service functions as props */}
       <SelectedAppComponent
         getConfig={getConfig}
