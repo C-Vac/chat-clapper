@@ -9,7 +9,7 @@ Keepin' it 💯 since Saturday, May 3, 2025. Straight out tha Goblinverse
 This whole operation is split into two main hustles: the script itself and the UI to boss it around.
 
 /chat-clapper/
-|
+│
 ├── script/         <-- The brains: Tampermonkey script & testing lab
 │   ├── chat-clapper.user.js  # The actual userscript file to install
 │   ├── tests/                # Test files, mocks, sample data
@@ -19,14 +19,14 @@ This whole operation is split into two main hustles: the script itself and the U
 │   ├── package.json          # Node.js dev dependencies for testing (Vitest, JSDOM)
 │   ├── tsconfig.json         # TypeScript config for tests
 │   └── vitest.config.ts      # Vitest config (uses JSDOM environment)
-|
+│
 ├── ui/             <-- The face: Local config UI (Vite + React + TS)
 │   ├── src/                  # React source code (components, services...)
 │   │   └── services/         # configService.ts handles loading/saving (mocks for dev)
 │   ├── vite.config.ts        # Vite config
 │   ├── package.json          # Node.js dependencies for the UI build/dev server
 │   └── ...                   # Standard Vite/React project files
-|
+│
 └── README.md       <-- You are here, playa!
 
 
