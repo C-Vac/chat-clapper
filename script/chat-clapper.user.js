@@ -15,220 +15,527 @@
 (function () {
     'use strict';
 
-    const CONFIG_KEY = 'chatClapperConfig'; // Ensure this matches configService
+    // --- Constants ---
+    const CONFIG_KEY = 'chatClapperConfig';
+    const DB_NAME = 'chatClapperHistoryDB';
+    const STORE_NAME = 'blockedMessages';
+    const CONFIG_UI_URL_PREFIX = 'http://localhost:5173';
+    const LOG_PREFIX = '[ChatClapper]';
 
-    // --- Bridge GM functions for UI ---
-    // This runs immediately at document-start
-    console.log('%c ChatClapper: Bridging GM functions...', 'color: orange; font-weight: bold;');
-    // Check if the GM functions are available in the userscript's scope
-    if (typeof GM_getValue === 'function' && typeof GM_setValue === 'function') {
-        // Use unsafeWindow to access the page's window object
-        // Assign the functions to uniquely named properties on the page's window
-        unsafeWindow.chatClapper_GM_getValue = GM_getValue;
-        unsafeWindow.chatClapper_GM_setValue = GM_setValue;
-        unsafeWindow.chatClapper_isGmReady = true; // Flag for the UI's checkGmReady
-        console.log('%c ChatClapper: Bridged functions attached to unsafeWindow.', 'color: green; font-weight: bold;');
-    } else {
-        console.error('%c ChatClapper: GM_getValue/GM_setValue NOT found in userscript scope!', 'color: red; font-weight: bold;');
-        // Ensure the flag reflects reality if bridging fails
-        unsafeWindow.chatClapper_isGmReady = false;
-    }
-    // --- End Bridging ---
+    // --- Logger ---
+    const Logger = {
+        log: (...args) => console.log(`${LOG_PREFIX}`, ...args),
+        warn: (...args) => console.warn(`${LOG_PREFIX} [WARN]`, ...args),
+        error: (...args) => console.error(`${LOG_PREFIX} [ERROR]`, ...args),
+        info: (...args) => console.info(`${LOG_PREFIX} [INFO]`, ...args),
+        action: (...args) => console.log(`${LOG_PREFIX} [ACTION]`, ...args),
+        success: (...args) => console.log(`${LOG_PREFIX} [SUCCESS]`, ...args),
+        fail: (...args) => console.error(`${LOG_PREFIX} [FAIL]`, ...args), // Consistent error logging
+        debug: (...args) => console.debug(`${LOG_PREFIX} [DEBUG]`, ...args), // For verbose debugging if needed
+    };
 
+    // --- Database Service ---
+    const DatabaseService = {
+        db: null,
 
-    // --- Main Script Logic (Async Initialization) ---
-    /**
-     * Initializes the core logic for finding and replacing chat messages.
-     * Loads configuration asynchronously and sets up DOM observers.
-     */
-    async function initializeClapperLogic() {
-        console.log("[INFO] Initializing Chat Clapper main logic (async)...");
-
-        // Don't run clapping logic on the config UI page itself
-        if (window.location.href.startsWith('http://localhost:5173')) {
-            console.log("[INFO] On config UI page, skipping clapper initialization.");
-            return;
-        }
-
-        /** @type {any} */ // JSDoc type hint
-        let config = {};
-        try {
-            // Use await with GM_getValue. Provide a default value ('{}').
-            const storedConfig = await GM_getValue(CONFIG_KEY, '{}');
-            config = JSON.parse(storedConfig); // Parse the string result
-            console.log("[CONFIG] Async loaded config:", config);
-        } catch (e) {
-            console.error("[FAIL] Failed to load or parse config asynchronously:", e);
-            return; // Stop if config loading fails
-        }
-
-        // --- Get Global and Site-Specific Settings ---
-        const globalConfig = config.global || {};
-        const sitesConfig = config.sites || {};
-        const currentUrl = window.location.href; // URL of the target page
-
-        let siteKey = null;
-        let siteConfig = null;
-
-        // Find the first matching site configuration
-        for (const pattern in sitesConfig) {
-            try {
-                // Escape regex special characters in the pattern, then replace wildcard *
-                const regexPattern = pattern
-                    .replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-                    .replace(/\\\*/g, '.*');
-                const regex = new RegExp(`^${regexPattern}$`);
-
-                if (regex.test(currentUrl)) {
-                    siteKey = pattern;
-                    siteConfig = sitesConfig[pattern];
-                    console.log(`[CONFIG] Matched site config for pattern: ${siteKey}`);
-                    break; // Use the first match found
+        async initDB() {
+            return new Promise((resolve, reject) => {
+                Logger.info(`Initializing IndexedDB: ${DB_NAME}`);
+                // Check if IndexedDB is available (e.g., in some testing environments it might not be)
+                if (typeof indexedDB === 'undefined') {
+                    Logger.error("IndexedDB API not available in this environment.");
+                    return reject(new Error("IndexedDB not available"));
                 }
+                const request = indexedDB.open(DB_NAME, 1);
+
+                request.onerror = (event) => {
+                    Logger.fail("Error opening IndexedDB:", event.target.error);
+                    reject(event.target.error);
+                };
+
+                request.onsuccess = (event) => {
+                    Logger.success("IndexedDB opened successfully.");
+                    this.db = event.target.result;
+                    resolve(this.db);
+                };
+
+                request.onupgradeneeded = (event) => {
+                    Logger.info("Upgrading IndexedDB schema...");
+                    const tempDb = event.target.result;
+                    if (!tempDb.objectStoreNames.contains(STORE_NAME)) {
+                        const store = tempDb.createObjectStore(STORE_NAME, { keyPath: 'id', autoIncrement: true });
+                        store.createIndex('timestamp', 'timestamp', { unique: false });
+                        Logger.info(`Object store "${STORE_NAME}" created.`);
+                    } else {
+                        Logger.info(`Object store "${STORE_NAME}" already exists.`);
+                    }
+                };
+            });
+        },
+
+        async addBlockedMessage(messageData) {
+            if (!this.db) {
+                Logger.error("Database not initialized. Cannot add message.");
+                return Promise.reject(new Error("Database not initialized"));
+            }
+            return new Promise((resolve, reject) => {
+                try {
+                    const transaction = this.db.transaction([STORE_NAME], 'readwrite');
+                    const store = transaction.objectStore(STORE_NAME);
+                    const messageToStore = { ...messageData, timestamp: Date.now() };
+                    const request = store.add(messageToStore);
+
+                    request.onsuccess = (event) => {
+                        Logger.success(`Message added to DB with ID: ${event.target.result}`);
+                        resolve(event.target.result);
+                    };
+
+                    request.onerror = (event) => {
+                        Logger.fail("Error adding message to DB:", event.target.error);
+                        reject(event.target.error);
+                    };
+                } catch (error) {
+                    Logger.fail("Error creating DB transaction:", error);
+                    reject(error);
+                }
+            });
+        },
+
+        async getRecentMessages(limit = 10) {
+            if (!this.db) {
+                Logger.error("Database not initialized. Cannot get messages.");
+                return Promise.resolve([]); // Return empty array if DB not ready
+            }
+            return new Promise((resolve, reject) => {
+                try {
+                    const transaction = this.db.transaction([STORE_NAME], 'readonly');
+                    const store = transaction.objectStore(STORE_NAME);
+                    const index = store.index('timestamp');
+                    const messages = [];
+                    let cursorRequest = index.openCursor(null, 'prev'); // newest first
+
+                    cursorRequest.onsuccess = (event) => {
+                        const cursor = event.target.result;
+                        if (cursor && messages.length < limit) {
+                            messages.push(cursor.value);
+                            cursor.continue();
+                        } else {
+                            Logger.success(`Retrieved ${messages.length} recent messages from DB.`);
+                            resolve(messages);
+                        }
+                    };
+
+                    cursorRequest.onerror = (event) => {
+                        Logger.fail("Error retrieving messages from DB:", event.target.error);
+                        reject(event.target.error);
+                    };
+                } catch (error) {
+                    Logger.fail("Error creating DB transaction for retrieval:", error);
+                    reject(error);
+                }
+            });
+        },
+    };
+
+    // --- Bridge Service ---
+    const BridgeService = {
+        // Need to check unsafeWindow availability *inside* the functions
+        // because it might not exist at the top level in all environments (like tests)
+        bridgeGmFunctions(gmGetValue, gmSetValue) {
+            Logger.info('Attempting to bridge GM functions...');
+            if (typeof unsafeWindow === 'undefined') {
+                Logger.warn('unsafeWindow not available, cannot bridge GM functions.');
+                return false;
+            }
+            if (typeof gmGetValue === 'function' && typeof gmSetValue === 'function') {
+                unsafeWindow.chatClapper_GM_getValue = gmGetValue;
+                unsafeWindow.chatClapper_GM_setValue = gmSetValue;
+                unsafeWindow.chatClapper_isGmReady = true;
+                Logger.success('Bridged GM functions attached to unsafeWindow.');
+                return true;
+            } else {
+                unsafeWindow.chatClapper_isGmReady = false;
+                Logger.error('GM_getValue/GM_setValue NOT found in userscript scope!');
+                return false;
+            }
+        },
+
+        exposeDbGetter(getRecentMessagesFn) {
+            Logger.info('Attempting to expose DB getter function...');
+            if (typeof unsafeWindow === 'undefined') {
+                Logger.warn('unsafeWindow not available, cannot expose DB getter.');
+                return false;
+            }
+            if (typeof getRecentMessagesFn === 'function') {
+                unsafeWindow.chatClapper_getRecentMessages = getRecentMessagesFn;
+                Logger.success('Exposed getRecentMessages function to unsafeWindow.');
+                return true;
+            } else {
+                Logger.error('Provided getRecentMessagesFn is not a function.');
+                return false;
+            }
+        },
+    };
+
+    // --- Config Service ---
+    const ConfigService = {
+        config: null, // Cache loaded config
+
+        async loadConfig(gmGetValue) {
+            Logger.info("Loading configuration...");
+            if (typeof gmGetValue !== 'function') {
+                Logger.error("GM_getValue function is not available.");
+                throw new Error("GM_getValue is not available");
+            }
+            try {
+                const storedConfig = await gmGetValue(CONFIG_KEY, '{}');
+                this.config = JSON.parse(storedConfig);
+                Logger.success("Configuration loaded and parsed:", this.config);
+                return this.config;
             } catch (e) {
-                console.error(`[WARN] Invalid regex pattern in config sites key: "${pattern}"`, e);
+                Logger.fail("Failed to load or parse config:", e);
+                this.config = {}; // Set to empty config on failure
+                throw e; // Re-throw error after logging
+            }
+        },
+
+        findSiteConfig(url) {
+            Logger.info(`Finding site config for URL: ${url}`);
+            if (!this.config || !this.config.sites) {
+                Logger.warn("No sites configured or config not loaded.");
+                return { siteKey: null, siteConfig: null, globalConfig: this.config?.global || {} };
+            }
+
+            const globalConfig = this.config.global || {};
+            const sitesConfig = this.config.sites;
+
+            for (const pattern in sitesConfig) {
+                try {
+                    // Escape regex special characters, then replace wildcard * with .*
+                    const regexPattern = pattern
+                        .replace(/[.*+?^${}()|[\]\\]/g, '\\$&') // Escape most specials
+                        .replace(/\\\*/g, '.*'); // Replace \* with .*
+                    const regex = new RegExp(`^${regexPattern}$`); // Match whole string
+
+                    if (regex.test(url)) {
+                        Logger.success(`Matched site config for pattern: ${pattern}`);
+                        return { siteKey: pattern, siteConfig: sitesConfig[pattern], globalConfig };
+                    }
+                } catch (e) {
+                    Logger.warn(`Invalid regex pattern in config sites key: "${pattern}"`, e);
+                    // Continue checking other patterns
+                }
+            }
+
+            Logger.info(`No site configuration found matching current URL.`);
+            return { siteKey: null, siteConfig: null, globalConfig };
+        },
+
+        getValidatedConfig(siteKey, siteConfig, globalConfig) {
+            Logger.info("Validating configuration parts...");
+            if (!siteConfig) {
+                Logger.warn("No siteConfig provided for validation.");
+                return null;
+            }
+
+            const replacementText = globalConfig?.replacementText || "[Message Clapped]";
+            const delaySeconds = typeof globalConfig?.delaySeconds === 'number' ? globalConfig.delaySeconds : 3;
+            // Ensure users are lowercase strings, filtering out empty/null values
+            const usersToBlock = (siteConfig.users || [])
+                .map(u => String(u || '').trim().toLowerCase())
+                .filter(u => u.length > 0);
+
+            const selectors = siteConfig.selectors || {};
+            const { container: containerSelector, author: authorSelector, content: contentSelector } = selectors;
+
+            if (!containerSelector || !authorSelector || !contentSelector) {
+                Logger.fail(`Missing required selectors (container, author, or content) for site: ${siteKey}`);
+                return null;
+            }
+
+            if (usersToBlock.length === 0) {
+                Logger.warn(`No valid users configured to block for site: ${siteKey}. Clapper will run but block no one.`);
+            }
+
+            const validated = {
+                replacementText,
+                delaySeconds,
+                usersToBlock,
+                selectors: { containerSelector, authorSelector, contentSelector },
+                siteKey
+            };
+            Logger.success("Configuration validated:", validated);
+            return validated;
+        }
+    };
+
+    // --- DOM Service ---
+    const DomService = {
+        waitForElement(selector, timeoutSeconds = 30) {
+            Logger.info(`Waiting for element: "${selector}" (max ${timeoutSeconds}s)`);
+            return new Promise((resolve, reject) => {
+                const checkIntervalMs = 500;
+                let attempts = 0;
+                const maxAttempts = (timeoutSeconds * 1000) / checkIntervalMs;
+
+                const intervalId = setInterval(() => {
+                    attempts++;
+                    const element = document.querySelector(selector);
+
+                    if (element) {
+                        Logger.success(`Found element "${selector}" after ${attempts} attempts.`);
+                        clearInterval(intervalId);
+                        resolve(element);
+                    } else if (attempts > maxAttempts) {
+                        clearInterval(intervalId);
+                        Logger.fail(`Couldn't find element "${selector}" after ${timeoutSeconds} seconds.`);
+                        reject(new Error(`Element not found: ${selector}`));
+                    } else {
+                        Logger.debug(`Element "${selector}" not found, attempt ${attempts}/${maxAttempts}`);
+                    }
+                }, checkIntervalMs);
+            });
+        },
+
+        getElementText(element, selector) {
+            const target = element.querySelector(selector);
+            // Extract text, handle potential colon, trim, and lowercase for author comparison
+            return (target?.textContent || "").split(':')[0].trim().toLowerCase();
+        },
+
+        replaceElementContent(element, selector, replacementText) {
+            const contentElement = element.querySelector(selector);
+            if (contentElement) {
+                Logger.action(`Replacing content in selector "${selector}"`);
+                contentElement.textContent = replacementText;
+                return contentElement.textContent; // Return original for history
+            } else {
+                Logger.warn(`Could not find content element with selector "${selector}" to replace.`);
+                return null; // Indicate failure
+            }
+        },
+
+        styleClappedElement(element) {
+            if (element instanceof HTMLElement) {
+                Logger.action(`Applying clap styling to element.`);
+                element.style.opacity = '0.5';
+                element.style.fontStyle = 'italic';
+            } else {
+                Logger.warn(`Cannot apply style, node is not an HTMLElement.`);
+            }
+        },
+
+        dispatchEvent(eventName, detail) {
+            try {
+                Logger.info(`Dispatching event "${eventName}"`);
+                const event = new CustomEvent(eventName, { detail });
+                window.dispatchEvent(event);
+            } catch (error) {
+                Logger.error(`Failed to dispatch event "${eventName}":`, error);
             }
         }
+    };
 
-        // Exit if no configuration matches the current site
-        if (!siteConfig) {
-            console.log(`[INFO] No site configuration found matching current URL: ${currentUrl}`);
-            return;
-        }
+    // --- Observer Service ---
+    const ObserverService = {
+        observer: null,
 
-        // --- Validate Required Config Parts ---
-        const replacementText = globalConfig.replacementText || "[Message Clapped]";
-        const delaySeconds = typeof globalConfig.delaySeconds === 'number' ? globalConfig.delaySeconds : 3;
-        // Ensure users are lowercase strings for case-insensitive comparison
-        const usersToBlock = (siteConfig.users || []).map(u => String(u || '').toLowerCase());
-        const selectors = siteConfig.selectors || {};
-        const containerSelector = selectors.container;
-        const authorSelector = selectors.author;
-        const contentSelector = selectors.content;
+        startObserver(
+            containerElement,
+            validatedConfig,
+            dbService, // Inject DatabaseService instance
+            domService // Inject DomService instance
+        ) {
+            Logger.info("Initializing MutationObserver...");
 
-        // Check for essential selectors
-        if (!containerSelector || !authorSelector || !contentSelector) {
-            console.error(`[FAIL] Missing required selectors (container, author, or content) for site: ${siteKey}`);
-            return;
-        }
-        if (usersToBlock.length === 0) {
-            console.warn(`[WARN] No users configured to block for site: ${siteKey}`);
-            // Continue running even if no users are listed
-        }
+            const {
+                usersToBlock,
+                selectors,
+                replacementText,
+                delaySeconds,
+                siteKey
+            } = validatedConfig;
 
-        console.log(`[CONFIG] Using settings for ${siteKey}:`, {
-            users: usersToBlock,
-            selectors: { container: containerSelector, author: authorSelector, content: contentSelector },
-            replacement: replacementText,
-            delay: delaySeconds
-        });
+            this.observer = new MutationObserver(mutations => {
+                mutations.forEach(mutation => {
+                    mutation.addedNodes.forEach(node => {
+                        if (node.nodeType === Node.ELEMENT_NODE) {
+                            /** @type {Element} */
+                            const messageElement = node;
+                            // Check if the added node *itself* matches the container selector's descendant structure
+                            // or if a relevant child was added deeper in the tree.
+                            // A simple check: does it contain an author element?
+                            const authorElement = messageElement.querySelector(selectors.authorSelector);
 
-        // --- Wait for Chat Container & Initialize Observer ---
-        // Pass necessary parameters to the waiting function
-        waitForChatContainer(containerSelector, (chatContainerElement) => {
-            // Once the container is found, initialize the observer
-            initializeChatObserver(chatContainerElement, usersToBlock, selectors, replacementText, delaySeconds);
-        });
-    }
+                            if (authorElement) {
+                                // Get author using DomService method for consistency
+                                const authorName = domService.getElementText(messageElement, selectors.authorSelector);
 
-    /**
-     * Waits for an element matching the selector to appear in the DOM.
-     * @param {string} selector - The CSS selector for the target element.
-     * @param {(element: Element) => void} callback - Function to execute once the element is found.
-     */
-    function waitForChatContainer(selector, callback) {
-        const checkIntervalMs = 500;
-        const maxWaitSeconds = 30;
-        let checkAttempts = 0;
-        const maxAttempts = (maxWaitSeconds * 1000) / checkIntervalMs;
+                                if (authorName && usersToBlock.includes(authorName)) {
+                                    Logger.action(`Spotted target user "${authorName}". Setting ${delaySeconds}s timer... ⏳`);
 
-        console.log(`[INFO] Waiting for chat container: "${selector}"`);
+                                    setTimeout(async () => {
+                                        Logger.info(`Timer finished for "${authorName}". Attempting clap.`);
+                                        const contentElement = messageElement.querySelector(selectors.contentSelector);
 
-        const intervalId = setInterval(() => {
-            checkAttempts++;
-            // Query the document for the container element
-            const container = document.querySelector(selector);
-
-            if (container) {
-                // Element found
-                console.log(`[SUCCESS] Found chat container "${selector}" after ${checkAttempts} attempts.`);
-                clearInterval(intervalId); // Stop checking
-                callback(container); // Execute the provided callback
-            } else if (checkAttempts > maxAttempts) {
-                // Timeout reached
-                clearInterval(intervalId);
-                console.error(`[FAIL] Couldn't find chat container "${selector}" after ${maxWaitSeconds} seconds. Script stopping for this page.`);
-            }
-        }, checkIntervalMs);
-    }
-
-
-    /**
-     * Initializes and attaches a MutationObserver to watch for new chat messages.
-     * @param {Element} chatContainer - The DOM element containing chat messages.
-     * @param {string[]} users - Array of lowercase usernames to block.
-     * @param {{container: string, author: string, content: string}} selectors - Object containing CSS selectors.
-     * @param {string} replaceWith - The text to replace blocked messages with.
-     * @param {number} delaySec - Delay in seconds before replacing the message.
-     */
-    function initializeChatObserver(chatContainer, users, selectors, replaceWith, delaySec) {
-        console.log("[INFO] Attaching MutationObserver to chat container.");
-
-        const observer = new MutationObserver(mutations => {
-            mutations.forEach(mutation => {
-                mutation.addedNodes.forEach(node => {
-                    // Process only element nodes
-                    if (node.nodeType === Node.ELEMENT_NODE) {
-                        /** @type {Element} */ // JSDoc type hint
-                        const elementNode = node;
-                        // Find the author element within the newly added node
-                        const authorElement = elementNode.querySelector(selectors.author);
-
-                        if (authorElement) {
-                            // Extract author name, handle potential colon, trim, and lowercase
-                            const authorName = (authorElement.textContent || "").split(':')[0].trim().toLowerCase();
-
-                            // Check if the author is in the block list
-                            if (authorName && users.includes(authorName)) {
-                                console.log(`[ACTION] Spotted target user "${authorName}". Setting ${delaySec}s timer... ⏳`);
-                                // Set a timeout to replace the message content after the delay
-                                setTimeout(() => {
-                                    // Re-find the content element within the same node (it might have changed)
-                                    const contentElement = elementNode.querySelector(selectors.content);
-                                    if (contentElement) {
-                                        console.log(`[ACTION] Clapping message from "${authorName}" 💥`);
-                                        contentElement.textContent = replaceWith; // Perform the replacement
-                                        // Optional styling: Apply to the parent node of the message
-                                        if (elementNode instanceof HTMLElement) {
-                                            elementNode.style.opacity = '0.5';
-                                            elementNode.style.fontStyle = 'italic';
+                                        if (!contentElement) {
+                                            Logger.warn(`Timeout fired for "${authorName}", but couldn't find content element using selector "${selectors.contentSelector}" anymore.`);
+                                            return; // Content element disappeared before clapping
                                         }
-                                    } else {
-                                        // Log a warning if the content element is gone before the timeout fires
-                                        console.warn(`[WARN] Timeout fired for "${authorName}", but couldn't find content element with selector "${selectors.content}" anymore.`);
-                                    }
-                                }, delaySec * 1000); // Convert seconds to milliseconds
+                                        const originalContent = contentElement.textContent; // Get original content *before* replacing
+
+                                        domService.replaceElementContent(messageElement, selectors.contentSelector, replacementText);
+                                        domService.styleClappedElement(messageElement);
+                                        Logger.action(`Clapped message from "${authorName}" 💥`);
+
+                                        // --- Store and Dispatch ---
+                                        try {
+                                            const messageDetails = {
+                                                author: authorName,
+                                                originalContent: originalContent || "[Content not captured]",
+                                                clappedContent: replacementText,
+                                                site: siteKey,
+                                            };
+                                            // Add to DB (timestamp added internally by dbService)
+                                            const messageId = await dbService.addBlockedMessage(messageDetails);
+
+                                            // Dispatch event with full details including ID and timestamp
+                                            domService.dispatchEvent('chatClapperMessageBlocked', {
+                                                ...messageDetails,
+                                                id: messageId,
+                                                timestamp: Date.now() // Add current timestamp for event consistency
+                                            });
+                                        } catch (error) {
+                                            Logger.fail("Error storing message or dispatching event after clap:", error);
+                                        }
+                                    }, delaySeconds * 1000);
+                                }
+                            } else {
+                                // Logger.debug("Added node did not contain author element, skipping.", node)
                             }
                         }
-                    }
+                    });
                 });
             });
-        });
 
-        // Start observing the chat container for added child nodes and subtree changes
-        observer.observe(chatContainer, { childList: true, subtree: true });
-        console.log("[SUCCESS] Observer attached and watching. Script ready. 💯");
+            // Observe the container for added child nodes and subtree changes
+            this.observer.observe(containerElement, { childList: true, subtree: true });
+            Logger.success("Observer attached and watching. Script ready. 💯");
+        },
+
+        disconnectObserver() {
+            if (this.observer) {
+                Logger.info("Disconnecting MutationObserver.");
+                this.observer.disconnect();
+                this.observer = null;
+            }
+        }
+    };
+
+    // --- Main Initialization Logic ---
+    async function initialize() {
+        Logger.log("Chat Clapper initializing...");
+
+        // --- 1. Bridging (Run early at document-start) ---
+        // Bridge GM functions immediately if available.
+        // GM functions are passed directly from the userscript grant scope.
+        BridgeService.bridgeGmFunctions(
+            typeof GM_getValue === 'function' ? GM_getValue : undefined,
+            typeof GM_setValue === 'function' ? GM_setValue : undefined
+        );
+
+        // --- Wait for DOMContentLoaded for the rest ---
+        // Make sure the DOM is ready before trying to access/manipulate it or load config that might depend on it indirectly.
+        if (document.readyState === 'loading') {
+            Logger.info('DOM not ready, waiting for DOMContentLoaded...');
+            await new Promise(resolve => window.addEventListener('DOMContentLoaded', resolve, { once: true }));
+            Logger.info('DOMContentLoaded event fired.');
+        } else {
+            Logger.info('DOM already interactive or complete.');
+        }
+
+        // --- 2. Check if on Config UI Page ---
+        if (window.location.href.startsWith(CONFIG_UI_URL_PREFIX)) {
+            Logger.info("On config UI page, initializing DB and exposing getter only.");
+            try {
+                // Init DB for potential history viewing on config page
+                await DatabaseService.initDB();
+                // Expose the getter, binding `this` to DatabaseService
+                BridgeService.exposeDbGetter(DatabaseService.getRecentMessages.bind(DatabaseService));
+                Logger.info("DB initialized and getter exposed for config UI.");
+            } catch (error) {
+                Logger.fail("Failed to initialize DB for config UI:", error);
+            }
+            // Stop further execution for the main clapping logic
+            return;
+        }
+
+        Logger.info("Not on config UI page, proceeding with full initialization.");
+
+        // --- 3. Initialize Database ---
+        try {
+            await DatabaseService.initDB();
+            // Expose DB getter here too, after DB init
+            BridgeService.exposeDbGetter(DatabaseService.getRecentMessages.bind(DatabaseService));
+        } catch (error) {
+            Logger.fail("Failed to initialize database. Clapper cannot run without DB history features.", error);
+            // Decide if we should stop entirely. For now, we stop.
+            return;
+        }
+
+        // --- 4. Load Configuration ---
+        let config;
+        try {
+            // Pass the actual GM_getValue function
+            config = await ConfigService.loadConfig(
+                typeof GM_getValue === 'function' ? GM_getValue : undefined
+            );
+            if (!config) { throw new Error("Failed to load config."); }
+        } catch (error) {
+            Logger.fail("Failed to load configuration. Stopping.", error);
+            return; // Stop if config fails
+        }
+
+        // --- 5. Find and Validate Site-Specific Configuration ---
+        const { siteKey, siteConfig, globalConfig } = ConfigService.findSiteConfig(window.location.href);
+
+        if (!siteKey || !siteConfig) {
+            Logger.info("No matching site configuration found for this URL. Stopping clapper logic for this page.");
+            return;
+        }
+
+        const validatedConfig = ConfigService.getValidatedConfig(siteKey, siteConfig, globalConfig);
+
+        if (!validatedConfig) {
+            Logger.fail("Configuration validation failed. Stopping.");
+            return;
+        }
+
+        // --- 6. Wait for Chat Container ---
+        let chatContainerElement;
+        try {
+            chatContainerElement = await DomService.waitForElement(validatedConfig.selectors.containerSelector);
+        } catch (error) {
+            Logger.fail(`Could not find chat container "${validatedConfig.selectors.containerSelector}". Stopping.`, error);
+            return;
+        }
+
+        // --- 7. Start the Observer ---
+        // Pass validated config and service instances
+        ObserverService.startObserver(
+            chatContainerElement,
+            validatedConfig,
+            DatabaseService, // Pass the service itself
+            DomService
+        );
+
+        Logger.log("Chat Clapper initialization complete.");
     }
 
-
-    // --- Trigger Initialization ---
-    // Ensure the main logic runs only after the DOM is ready.
-    // Check if the DOM is already interactive/complete
-    if (document.readyState === 'interactive' || document.readyState === 'complete') {
-        initializeClapperLogic();
-    } else {
-        // Otherwise, wait for the DOMContentLoaded event
-        window.addEventListener('DOMContentLoaded', initializeClapperLogic, { once: true });
-    }
+    // --- Start Initialization ---
+    // Run the async initialization function. Errors within are caught and logged.
+    initialize().catch(err => {
+        Logger.fail("Unhandled error during initialization:", err);
+    });
 
 })(); // End of IIFE

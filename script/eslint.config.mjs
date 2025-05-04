@@ -20,6 +20,7 @@ export default defineConfig([
         ...globals.node,
         "GM_getValue": "readonly",
         "GM_setValue": "readonly",
+        "unsafeWindow": "readonly"
       }
     }
   },
