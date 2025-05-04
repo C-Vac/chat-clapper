@@ -1,48 +1,60 @@
 import { render, screen } from '@testing-library/react';
-import { describe, it, expect, vi } from 'vitest';
-import App from './App'; // Assuming your main App component is in ./App.tsx
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import App from './App';
 import * as configService from './services/configService';
 
-// Mock the configService functions that App might call on render
-vi.mock('./services/configService', () => ({
-  checkGmReady: vi.fn(),
-  loadConfig: vi.fn().mockResolvedValue({ // Provide mock initial config
-    global: { replacementText: '[Mocked Clap]', delaySeconds: 2 },
+// (Keep the beforeEach and mock setup from the previous example)
+beforeEach(() => {
+  vi.clearAllMocks();
+  // Reset window properties if needed
+  window.chatClapper_isGmReady = true;
+  window.chatClapper_GM_getValue = vi.fn(async (key, defaultValue) => { /* default mock impl */ });
+  window.chatClapper_GM_setValue = vi.fn(async (key, value) => { /* default mock impl */ });
+  // Mock loadConfig
+  vi.spyOn(configService, 'loadConfig').mockResolvedValue({
+    global: { replacementText: 'Test Clap', delaySeconds: 1 },
     sites: {},
-  }),
-  // Mock other functions from configService if App uses them
-}));
+  });
+});
 
-describe('App Component Baseline Test', () => {
-  it('should render the configuration view when GM functions are ready', () => {
-    // Arrange: Simulate GM functions being ready
-    vi.mocked(configService.checkGmReady).mockReturnValue(true);
 
-    // Act: Render the App component
+describe('App Component (with Regex Queries)', () => {
+  it('should render config view (dashboard) when bridged functions are ready', async () => {
+    // Arrange: window.chatClapper_isGmReady is true by default
+
+    // Act
     render(<App />);
 
-    // Assert: Check for an element expected in the main config view
-    // Replace 'Global Settings' with text or role specific to your config UI
-    const expectedElement = screen.getByRole('heading', { name: /Global Settings/i });
-    expect(expectedElement).toBeInTheDocument();
+    // Assert: Use regex for case-insensitive match on the heading name.
+    // Replace /dashboard/i if a different term is more stable/accurate for your config view.
+    // Using findByRole for potentially async rendering
+    const configHeading = await screen.findByRole('heading', {
+      name: /dashboard/i // Case-insensitive regex for "dashboard"
+    });
+    expect(configHeading).toBeInTheDocument();
 
-    // Verify loadConfig was called (optional, but good practice)
+    // Verify loadConfig was called
     expect(configService.loadConfig).toHaveBeenCalled();
   });
 
-  it('should render the setup instructions view when GM functions are not ready', () => {
-    // Arrange: Simulate GM functions being absent
-    vi.mocked(configService.checkGmReady).mockReturnValue(false);
+  it('should render setup view (install instructions) when bridged functions are NOT ready', () => {
+    // Arrange: Override the default mock
+    window.chatClapper_isGmReady = false;
+    window.chatClapper_GM_getValue = undefined;
+    window.chatClapper_GM_setValue = undefined;
+    vi.spyOn(configService, 'loadConfig').mockResolvedValue({} as any); // Prevent actual call
 
-    // Act: Render the App component
+    // Act
     render(<App />);
 
-    // Assert: Check for an element expected in the setup instructions view
-    // Replace 'Install the Userscript' with text specific to your setup view
-    const expectedElement = screen.getByRole('heading', { name: /Install the Userscript/i });
-    expect(expectedElement).toBeInTheDocument();
+    // Assert: Use regex for case-insensitive match on the heading name.
+    // Replace /install/i if a different term is more accurate for your setup view.
+    const setupHeading = screen.getByRole('heading', {
+      name: /install/i // Case-insensitive regex for "install"
+    });
+    expect(setupHeading).toBeInTheDocument();
 
-    // Verify loadConfig was *not* called in this case (optional)
+    // Verify loadConfig was *not* called
     expect(configService.loadConfig).not.toHaveBeenCalled();
   });
 });

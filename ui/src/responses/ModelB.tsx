@@ -1,1 +1,0 @@
-// Model B's response

@@ -1,1 +1,0 @@
-// Model C's response

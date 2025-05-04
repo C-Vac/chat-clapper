@@ -18,15 +18,25 @@
 
     console.log("------- Chat Clapper v4 Activated -------");
 
-    // --- Load Config ---
+    // Add the check again for confirmation
+    if (typeof GM_getValue === 'function') {
+        console.log('%c ChatClapper: GM_getValue is available! (run-at start)', 'color: green; font-weight: bold;');
+    } else {
+        console.error('%c ChatClapper: GM_getValue is NOT available! (run-at start)', 'color: red; font-weight: bold;');
+    }
+
+    // --- Load Config --- (This might run before config exists now, handle errors)
     let config = {};
     try {
-        const storedConfig = GM_getValue(CONFIG_KEY, '{}'); // Default to empty object string
+        // IMPORTANT: GM_getValue might not be fully ready SYNCHRONOUSLY even at document-start
+        // It's safer to wrap GM_calls in async functions or checks later in the script execution
+        // For now, let's see if the check *detects* it. Actual usage might need adjustment.
+        const storedConfig = GM_getValue(CONFIG_KEY, '{}'); // Check if this throws an error now
         config = JSON.parse(storedConfig);
         console.log("[CONFIG] Loaded config:", config);
     } catch (e) {
-        console.error("[FAIL] Failed to parse config from GM_getValue:", e);
-        return; // Stop if config is busted
+        console.error("[FAIL] Failed to parse config from GM_getValue (or GM_getValue not ready yet):", e);
+        // Don't necessarily return; maybe the UI just needs the functions available
     }
 
     // --- Get Global and Site-Specific Settings ---

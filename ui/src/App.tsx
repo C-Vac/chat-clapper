@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import "./App.css";
 import { checkGmReady } from "./services/configService"; // Import the checker
+import Baseline from './responses/baselineA'
 
 const App: React.FC = () => {
   const [isGmReady, setIsGmReady] = useState(false);
@@ -53,10 +54,8 @@ const App: React.FC = () => {
   const ConfigUI = () => (
     <div style={{ padding: "20px" }}>
       <h1>Chat Clapper Configurator</h1>
-      <p style={{ color: "green" }}>✅ Script connection ready. Build the real UI here!</p>
-      {/* --- TODO: Replace this with your actual UI components --- */}
-      <textarea style={{ width: "95%", height: "400px", marginTop: "10px" }} placeholder="Your UI Components Go Here... (Global Settings, Site Tabs, User Lists, HTML Analyzer, Selectors, Save Buttons etc.)"></textarea>
-      {/* --- End of TODO --- */}
+      <p style={{ color: "green" }}>✅ Script installed and GM functions detected.</p>
+      <Baseline />
     </div>
   );
 
