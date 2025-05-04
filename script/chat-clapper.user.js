@@ -1,10 +1,9 @@
 // ==UserScript==
-// @name         Chat Clapper 3000
+// @name         Chat Clapper 3000 EXPERIMENTAL
 // @namespace    http://tampermonkey.net/
-// @version      0.8
+// @version      0.9
 // @description  Clap goofy chatters on multiple sites using dynamic config from GM_getValue
 // @match        *://*/*
-// @match        http://localhost:5173/
 // @grant        GM_getValue
 // @grant        GM_setValue
 // @grant        unsafeWindow
@@ -188,12 +187,12 @@
             }
             try {
                 const storedConfig = await gmGetValue(CONFIG_KEY, '{}');
-                this.config = JSON.parse(storedConfig);
-                Logger.success("Configuration loaded and parsed:", this.config);
+                this.config = storedConfig;
+                Logger.success("Configuration loaded:", this.config);
                 return this.config;
             } catch (e) {
-                Logger.fail("Failed to load or parse config:", e);
-                this.config = {}; // Set to empty config on failure
+                Logger.fail("Failed to load config:", e);
+                this.config = {};
                 throw e; // Re-throw error after logging
             }
         },
