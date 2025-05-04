@@ -7,6 +7,8 @@
 // @match        http://localhost:5173/
 // @grant        GM_getValue
 // @grant        GM_setValue
+// @sandbox      JavaScript
+// @run-at       document-start
 // ==/UserScript==
 
 (function () {

@@ -1,8 +1,8 @@
-import { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import "./App.css";
 import { checkGmReady } from "./services/configService"; // Import the checker
 
-function App() {
+const App: React.FC = () => {
   const [isGmReady, setIsGmReady] = useState(false);
   const [fileUrl, setFileUrl] = useState("");
 

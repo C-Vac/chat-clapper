@@ -6,7 +6,7 @@ import Baseline from './responses/baselineA.tsx'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    {/* <App /> */}
-    <Baseline /> { /* Just testing dev env right now using the baseline script */}
+    <App />
+    {/* <Baseline /> { /* Just testing dev env right now using the baseline script */}
   </StrictMode>,
 )
