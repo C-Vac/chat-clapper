@@ -1,5 +1,6 @@
 // ==UserScript==
 // @name         Chat Clapper 3000 EXPERIMENTAL
+// @author       GG, Goblini, contrib. Big Ounce, misc goblins, et. al
 // @namespace    http://tampermonkey.net/
 // @version      0.9
 // @description  Clap goofy chatters on multiple sites using dynamic config from GM_getValue
@@ -9,6 +10,7 @@
 // @grant        unsafeWindow
 // @sandbox      JavaScript
 // @run-at       document-start
+// @noframes
 // ==/UserScript==
 
 (function () {
@@ -23,14 +25,12 @@
 
     // --- Logger ---
     const Logger = {
-        log: (...args) => console.log(`${LOG_PREFIX}`, ...args),
         warn: (...args) => console.warn(`${LOG_PREFIX} [WARN]`, ...args),
-        error: (...args) => console.error(`${LOG_PREFIX} [ERROR]`, ...args),
         info: (...args) => console.info(`${LOG_PREFIX} [INFO]`, ...args),
         action: (...args) => console.log(`${LOG_PREFIX} [ACTION]`, ...args),
         success: (...args) => console.log(`${LOG_PREFIX} [SUCCESS]`, ...args),
-        fail: (...args) => console.error(`${LOG_PREFIX} [FAIL]`, ...args), // Consistent error logging
-        debug: (...args) => console.info(`${LOG_PREFIX} [DEBUG]`, ...args), // For verbose debugging if needed
+        fail: (...args) => console.error(`${LOG_PREFIX} [FAIL]`, ...args),
+        debug: (...args) => console.debug(`${LOG_PREFIX} [DEBUG]`, ...args),
     };
 
     // --- Database Service ---
@@ -39,10 +39,10 @@
 
         async initDB() {
             return new Promise((resolve, reject) => {
-                Logger.info(`Initializing IndexedDB: ${DB_NAME}`);
+                // Logger.debug(`Initializing IndexedDB: ${DB_NAME}`);
                 // Check if IndexedDB is available (e.g., in some testing environments it might not be)
                 if (typeof indexedDB === 'undefined') {
-                    Logger.error("IndexedDB API not available in this environment.");
+                    Logger.fail("IndexedDB API not available in this environment.");
                     return reject(new Error("IndexedDB not available"));
                 }
                 const request = indexedDB.open(DB_NAME, 1);
@@ -59,14 +59,14 @@
                 };
 
                 request.onupgradeneeded = (event) => {
-                    Logger.info("Upgrading IndexedDB schema...");
+                    // Logger.debug("Upgrading IndexedDB schema...");
                     const tempDb = event.target.result;
                     if (!tempDb.objectStoreNames.contains(STORE_NAME)) {
                         const store = tempDb.createObjectStore(STORE_NAME, { keyPath: 'id', autoIncrement: true });
                         store.createIndex('timestamp', 'timestamp', { unique: false });
                         Logger.info(`Object store "${STORE_NAME}" created.`);
                     } else {
-                        Logger.info(`Object store "${STORE_NAME}" already exists.`);
+                        // Logger.debug(`Object store "${STORE_NAME}" already exists.`);
                     }
                 };
             });
@@ -74,7 +74,7 @@
 
         async addBlockedMessage(messageData) {
             if (!this.db) {
-                Logger.error("Database not initialized. Cannot add message.");
+                Logger.fail("Database not initialized. Cannot add message.");
                 return Promise.reject(new Error("Database not initialized"));
             }
             return new Promise((resolve, reject) => {
@@ -102,7 +102,7 @@
 
         async getRecentMessages(limit = 10) {
             if (!this.db) {
-                Logger.error("Database not initialized. Cannot get messages.");
+                Logger.fail("Database not initialized. Cannot get messages.");
                 return Promise.resolve([]); // Return empty array if DB not ready
             }
             return new Promise((resolve, reject) => {
@@ -141,7 +141,7 @@
         // Need to check unsafeWindow availability *inside* the functions
         // because it might not exist at the top level in all environments (like tests)
         bridgeGmFunctions(gmGetValue, gmSetValue) {
-            Logger.info('Attempting to bridge GM functions...');
+            // Logger.debug('Attempting to bridge GM functions...');
             if (typeof unsafeWindow === 'undefined') {
                 Logger.warn('unsafeWindow not available, cannot bridge GM functions.');
                 return false;
@@ -149,27 +149,27 @@
             if (typeof gmGetValue === 'function' && typeof gmSetValue === 'function') {
                 unsafeWindow.chatClapper_GM_getValue = gmGetValue;
                 unsafeWindow.chatClapper_GM_setValue = gmSetValue;
-                Logger.success('Bridged GM functions attached to unsafeWindow.');
+                // Logger.debug('Bridged GM functions attached to unsafeWindow.');
                 return true;
             } else {
                 unsafeWindow.chatClapper_isGmReady = false;
-                Logger.error('GM_getValue/GM_setValue NOT found in userscript scope!');
+                Logger.fail('GM_getValue/GM_setValue NOT found in userscript scope!');
                 return false;
             }
         },
 
         exposeDbGetter(getRecentMessagesFn) {
-            Logger.info('Attempting to expose DB getter function...');
+            // Logger.debug('Attempting to expose DB getter function...');
             if (typeof unsafeWindow === 'undefined') {
                 Logger.warn('unsafeWindow not available, cannot expose DB getter.');
                 return false;
             }
             if (typeof getRecentMessagesFn === 'function') {
                 unsafeWindow.chatClapper_getRecentMessages = getRecentMessagesFn;
-                Logger.success('Exposed getRecentMessages function to unsafeWindow.');
+                // Logger.debug('Exposed getRecentMessages function to unsafeWindow.');
                 return true;
             } else {
-                Logger.error('Provided getRecentMessagesFn is not a function.');
+                Logger.fail('Provided getRecentMessagesFn is not a function.');
                 return false;
             }
         },
@@ -180,9 +180,9 @@
         config: null, // Cache loaded config
 
         async loadConfig(gmGetValue) {
-            Logger.info("Loading configuration...");
+            // Logger.debug("Loading configuration...");
             if (typeof gmGetValue !== 'function') {
-                Logger.error("GM_getValue function is not available.");
+                Logger.fail("GM_getValue function is not available.");
                 throw new Error("GM_getValue is not available");
             }
             try {
@@ -198,7 +198,7 @@
         },
 
         findSiteConfig(url) {
-            Logger.info(`Finding site config for URL: ${url}`);
+            // Logger.debug(`Finding site config for URL: ${url}`);
             if (!this.config || !this.config.sites) {
                 Logger.warn("No sites configured or config not loaded.");
                 return { siteKey: null, siteConfig: null, globalConfig: this.config?.global || {} };
@@ -225,12 +225,12 @@
                 }
             }
 
-            Logger.info(`No site configuration found matching current URL.`);
+            Logger.warn(`No site configuration found matching current URL.`);
             return { siteKey: null, siteConfig: null, globalConfig };
         },
 
         getValidatedConfig(siteKey, siteConfig, globalConfig) {
-            Logger.info("Validating configuration parts...");
+            // Logger.debug("Validating configuration parts...");
             if (!siteConfig) {
                 Logger.warn("No siteConfig provided for validation.");
                 return null;
@@ -270,7 +270,7 @@
     // --- DOM Service ---
     const DomService = {
         waitForElement(selector, timeoutSeconds = 30) {
-            Logger.info(`Waiting for element: "${selector}" (max ${timeoutSeconds}s)`);
+            // Logger.debug(`Waiting for element: "${selector}" (max ${timeoutSeconds}s)`);
             return new Promise((resolve, reject) => {
                 const checkIntervalMs = 500;
                 let attempts = 0;
@@ -289,37 +289,28 @@
                         Logger.fail(`Couldn't find element "${selector}" after ${timeoutSeconds} seconds.`);
                         reject(new Error(`Element not found: ${selector}`));
                     } else {
-                        Logger.info(`Element "${selector}" not found, attempt ${attempts}/${maxAttempts}`);
+                        // Logger.debug(`Element "${selector}" not found, attempt ${attempts}/${maxAttempts}`);
                     }
                 }, checkIntervalMs);
             });
         },
 
         getElementText(element, selector) {
-            // *** NEW LOG 2 (was getAuthor) ***
-            Logger.info(`[getElementText] Called with selector: "${selector}" on element:`, element);
-
+            // Logger.debug(`[getElementText] Called with selector: "${selector}" on element:`, element);
             const target = element.querySelector(selector);
-
-            // *** NEW LOG 3 (was getAuthor) ***
-            Logger.info(`[getElementText] Found target element with querySelector("${selector}"):`, target);
 
             // Extract text, handle potential colon, trim, and lowercase for author comparison
             const text = target?.textContent || "";
-            // *** NEW LOG 4 (was getAuthor) ***
-            Logger.info(`[getElementText] target.textContent: "${text}"`);
 
             const processedName = text.split(':')[0].trim().toLowerCase();
-            // *** NEW LOG 5 (was getAuthor) ***
-            Logger.info(`[getElementText] Returning processed name: "${processedName}"`);
-
+            // Logger.debug(`[getElementText] Returning processed name: "${processedName}"`);
             return processedName;
-        }, // Make sure comma is here if needed
+        },
 
         replaceElementContent(element, selector, replacementText) {
             const contentElement = element.querySelector(selector);
             if (contentElement) {
-                Logger.action(`Replacing content in selector "${selector}"`);
+                // Logger.debug(`Replacing content in selector "${selector}"`);
                 contentElement.textContent = replacementText;
                 return contentElement.textContent; // Return original for history
             } else {
@@ -330,7 +321,7 @@
 
         styleClappedElement(element) {
             if (element instanceof HTMLElement) {
-                Logger.action(`Applying clap styling to element.`);
+                // Logger.debug(`Applying clap styling to element.`);
                 element.style.opacity = '0.5';
                 element.style.fontStyle = 'italic';
             } else {
@@ -340,11 +331,11 @@
 
         dispatchEvent(eventName, detail) {
             try {
-                Logger.info(`Dispatching event "${eventName}"`);
+                Logger.action(`Dispatching event "${eventName}"`);
                 const event = new CustomEvent(eventName, { detail });
                 window.dispatchEvent(event);
             } catch (error) {
-                Logger.error(`Failed to dispatch event "${eventName}":`, error);
+                Logger.fail(`Failed to dispatch event "${eventName}":`, error);
             }
         }
     };
@@ -356,10 +347,10 @@
         startObserver(
             containerElement,
             validatedConfig,
-            dbService, // Inject DatabaseService instance
-            domService // Inject DomService instance
+            dbService,
+            domService
         ) {
-            Logger.info("Initializing MutationObserver...");
+            // Logger.debug("Initializing Observer...");
 
             const {
                 usersToBlock,
@@ -378,22 +369,22 @@
                             // Check if the added node *itself* matches the container selector's descendant structure
                             // or if a relevant child was added deeper in the tree.
                             // A simple check: does it contain an author element?
-                            Logger.info(`[Observer Node Check] Processing ELEMENT_NODE:`, messageElement.tagName, messageElement.className, messageElement.id);
+                            // Logger.debug(`[Observer] Processing ELEMENT_NODE:`, messageElement.tagName, messageElement.className, messageElement.id);
 
                             const authorElement = messageElement.querySelector(selectors.authorSelector);
 
                             if (authorElement) {
                                 // Get author using DomService method for consistency
                                 const authorName = domService.getElementText(messageElement, selectors.authorSelector);
-                                Logger.info(`[Observer Check] Node Added. Extracted Author: "${authorName}". Configured users:`, usersToBlock);
+                                // Logger.debug(`[Observer] Node Added. Extracted Author: "${authorName}". Configured users:`, usersToBlock);
                                 if (authorName) { // Only log the check if authorName is not empty
-                                    Logger.info(`[Observer Check] Checking if "${authorName}" is in [${usersToBlock.join(', ')}]. Result: ${usersToBlock.includes(authorName)}`);
+                                    // Logger.debug(`[Observer] Checking if "${authorName}" is in [${usersToBlock.join(', ')}]. Result: ${usersToBlock.includes(authorName)}`);
                                 }
                                 if (authorName && usersToBlock.includes(authorName)) {
-                                    Logger.action(`Spotted target user "${authorName}". Setting ${delaySeconds}s timer... ⏳`);
+                                    // Logger.debug(`Spotted target user "${authorName}". Setting ${delaySeconds}s timer... ⏳`);
 
                                     setTimeout(async () => {
-                                        Logger.info(`Timer finished for "${authorName}". Attempting clap.`);
+                                        // Logger.debug(`Timer finished for "${authorName}". Attempting clap.`);
                                         const contentElement = messageElement.querySelector(selectors.contentSelector);
 
                                         if (!contentElement) {
@@ -429,7 +420,7 @@
                                     }, delaySeconds * 1000);
                                 }
                             } else {
-                                Logger.info("Added node did not contain author element, skipping.", node)
+                                // Logger.debug("Added node did not contain author element, skipping.", node)
                             }
                         }
                     });
@@ -443,7 +434,7 @@
 
         disconnectObserver() {
             if (this.observer) {
-                Logger.info("Disconnecting MutationObserver.");
+                Logger.info("Disconnecting Observer.");
                 this.observer.disconnect();
                 this.observer = null;
             }
@@ -452,7 +443,7 @@
 
     // --- Main Initialization Logic ---
     async function initialize() {
-        Logger.log("Chat Clapper initializing...");
+        Logger.info("Chat Clapper initializing...");
 
         // --- 1. Bridging (Run early at document-start) ---
         // Bridge GM functions immediately if available.
@@ -465,16 +456,16 @@
         // --- Wait for DOMContentLoaded for the rest ---
         // Make sure the DOM is ready before trying to access/manipulate it or load config that might depend on it indirectly.
         if (document.readyState === 'loading') {
-            Logger.info('DOM not ready, waiting for DOMContentLoaded...');
+            // Logger.debug('DOM not ready, waiting for DOMContentLoaded...');
             await new Promise(resolve => window.addEventListener('DOMContentLoaded', resolve, { once: true }));
-            Logger.info('DOMContentLoaded event fired.');
+            // Logger.debug('DOMContentLoaded event fired.');
         } else {
-            Logger.info('DOM already interactive or complete.');
+            // Logger.debug('DOM already interactive or complete.');
         }
 
         // --- 2. Check if on Config UI Page ---
         if (window.location.href.startsWith(CONFIG_UI_URL_PREFIX)) {
-            Logger.info("On config UI page, initializing DB and exposing getter only.");
+            Logger.warn("On config UI page, initializing DB and exposing getter only.");
             try {
                 // Init DB for potential history viewing on config page
                 await DatabaseService.initDB();
@@ -518,7 +509,7 @@
         const { siteKey, siteConfig, globalConfig } = ConfigService.findSiteConfig(window.location.href);
 
         if (!siteKey || !siteConfig) {
-            Logger.info("No matching site configuration found for this URL. Stopping clapper logic for this page.");
+            Logger.warn("No matching site configuration found for this URL. Stopping clapper logic for this page.");
             return;
         }
 
@@ -547,11 +538,11 @@
             DomService
         );
 
-        Logger.log("Chat Clapper initialization complete.");
+        Logger.info("Chat Clapper initialization complete.");
 
         if (typeof unsafeWindow !== 'undefined') {
             unsafeWindow.chatClapper_isGmReady = true;
-            Logger.info("Signaling readiness to test/UI (chatClapper_isGmReady = true)");
+            // Logger.debug("Signaling readiness to test/UI (chatClapper_isGmReady = true)");
         }
     }
 
