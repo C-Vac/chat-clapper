@@ -31,7 +31,7 @@
         action: (...args) => console.log(`${LOG_PREFIX} [ACTION]`, ...args),
         success: (...args) => console.log(`${LOG_PREFIX} [SUCCESS]`, ...args),
         fail: (...args) => console.error(`${LOG_PREFIX} [FAIL]`, ...args), // Consistent error logging
-        debug: (...args) => console.debug(`${LOG_PREFIX} [DEBUG]`, ...args), // For verbose debugging if needed
+        debug: (...args) => console.info(`${LOG_PREFIX} [DEBUG]`, ...args), // For verbose debugging if needed
     };
 
     // --- Database Service ---
@@ -150,7 +150,6 @@
             if (typeof gmGetValue === 'function' && typeof gmSetValue === 'function') {
                 unsafeWindow.chatClapper_GM_getValue = gmGetValue;
                 unsafeWindow.chatClapper_GM_setValue = gmSetValue;
-                unsafeWindow.chatClapper_isGmReady = true;
                 Logger.success('Bridged GM functions attached to unsafeWindow.');
                 return true;
             } else {
@@ -291,17 +290,32 @@
                         Logger.fail(`Couldn't find element "${selector}" after ${timeoutSeconds} seconds.`);
                         reject(new Error(`Element not found: ${selector}`));
                     } else {
-                        Logger.debug(`Element "${selector}" not found, attempt ${attempts}/${maxAttempts}`);
+                        Logger.info(`Element "${selector}" not found, attempt ${attempts}/${maxAttempts}`);
                     }
                 }, checkIntervalMs);
             });
         },
 
         getElementText(element, selector) {
+            // *** NEW LOG 2 (was getAuthor) ***
+            Logger.info(`[getElementText] Called with selector: "${selector}" on element:`, element);
+
             const target = element.querySelector(selector);
+
+            // *** NEW LOG 3 (was getAuthor) ***
+            Logger.info(`[getElementText] Found target element with querySelector("${selector}"):`, target);
+
             // Extract text, handle potential colon, trim, and lowercase for author comparison
-            return (target?.textContent || "").split(':')[0].trim().toLowerCase();
-        },
+            const text = target?.textContent || "";
+            // *** NEW LOG 4 (was getAuthor) ***
+            Logger.info(`[getElementText] target.textContent: "${text}"`);
+
+            const processedName = text.split(':')[0].trim().toLowerCase();
+            // *** NEW LOG 5 (was getAuthor) ***
+            Logger.info(`[getElementText] Returning processed name: "${processedName}"`);
+
+            return processedName;
+        }, // Make sure comma is here if needed
 
         replaceElementContent(element, selector, replacementText) {
             const contentElement = element.querySelector(selector);
@@ -365,12 +379,17 @@
                             // Check if the added node *itself* matches the container selector's descendant structure
                             // or if a relevant child was added deeper in the tree.
                             // A simple check: does it contain an author element?
+                            Logger.info(`[Observer Node Check] Processing ELEMENT_NODE:`, messageElement.tagName, messageElement.className, messageElement.id);
+
                             const authorElement = messageElement.querySelector(selectors.authorSelector);
 
                             if (authorElement) {
                                 // Get author using DomService method for consistency
                                 const authorName = domService.getElementText(messageElement, selectors.authorSelector);
-
+                                Logger.info(`[Observer Check] Node Added. Extracted Author: "${authorName}". Configured users:`, usersToBlock);
+                                if (authorName) { // Only log the check if authorName is not empty
+                                    Logger.info(`[Observer Check] Checking if "${authorName}" is in [${usersToBlock.join(', ')}]. Result: ${usersToBlock.includes(authorName)}`);
+                                }
                                 if (authorName && usersToBlock.includes(authorName)) {
                                     Logger.action(`Spotted target user "${authorName}". Setting ${delaySeconds}s timer... ⏳`);
 
@@ -411,7 +430,7 @@
                                     }, delaySeconds * 1000);
                                 }
                             } else {
-                                // Logger.debug("Added node did not contain author element, skipping.", node)
+                                Logger.info("Added node did not contain author element, skipping.", node)
                             }
                         }
                     });
@@ -530,6 +549,11 @@
         );
 
         Logger.log("Chat Clapper initialization complete.");
+
+        if (typeof unsafeWindow !== 'undefined') {
+            unsafeWindow.chatClapper_isGmReady = true;
+            Logger.info("Signaling readiness to test/UI (chatClapper_isGmReady = true)");
+        }
     }
 
     // --- Start Initialization ---

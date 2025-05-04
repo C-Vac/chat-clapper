@@ -12,7 +12,7 @@ const __dirname = path.dirname(__filename);
 // --- Constants ---
 const PORT = 3005; // Must match server.js
 const BASE_URL = `http://localhost:${PORT}`;
-const USERSCRIPT_PATH = path.join(__dirname, '..', 'userscript.refactored.user.js'); // Adjust path to your userscript file
+const USERSCRIPT_PATH = path.join(__dirname, '..', 'chat-clapper.user.js'); // Adjust path to your userscript file
 
 // --- Test Config ---
 const testConfig = {
@@ -25,18 +25,18 @@ const testConfig = {
             label: "Test Site 1",
             users: ["eve_the_target", "goofyuser"], // Lowercase!
             selectors: {
-                container: "#chat-box",
-                author: ".message .author", // More specific selector
-                content: ".message .content" // More specific selector
+                container: "#chat-box", // Container for the observer
+                author: ".author",       // Selector relative to the message element
+                content: ".content"      // Selector relative to the message element
             }
         },
         [`${BASE_URL}/site2`]: {
             label: "Test Site 2",
             users: ["heidi_target"], // Lowercase!
-            selectors: { // Can be same structure, different site
-                container: "#chat-box",
-                author: ".message .author",
-                content: ".message .content"
+            selectors: {
+                container: "#chat-box", // Container for the observer
+                author: ".author",       // Selector relative to the message element
+                content: ".content"      // Selector relative to the message element
             }
         },
         // Add a site that *won't* match to test exclusion
@@ -71,38 +71,52 @@ afterAll(async () => {
 async function setupPageWithUserscript(pageInstance, config) {
     const userscriptContent = fs.readFileSync(USERSCRIPT_PATH, 'utf8');
 
+    // This script runs *before* the page loads and before the userscript
     await pageInstance.addInitScript((configToInject) => {
-        // --- Mock GM functions ---
-        window.chatClapper_GM_getValue = async (key, defaultValue) => {
-            console.log(`[Mock GM_getValue] Called with key: ${key}`);
+        console.log('[Mock InitScript] Setting up GM mocks...');
+
+        // --- Mock the ACTUAL GM functions the userscript expects ---
+        window.GM_getValue = async (key, defaultValue) => {
+            console.log(`[Mock GM_getValue] Called with key: "${key}"`);
             if (key === 'chatClapperConfig') {
-                // Return the specific config for this test setup
-                return Promise.resolve(JSON.stringify(configToInject));
+                // Return the specific config for this test setup as JSON string
+                // Ensure configToInject is properly stringified if it's an object
+                const configJson = JSON.stringify(configToInject);
+                console.log('[Mock GM_getValue] Returning test config:', configJson);
+                return Promise.resolve(configJson);
             }
+            console.log('[Mock GM_getValue] Returning default value:', defaultValue);
+            // Return default value (might need JSON stringify if default is object?)
+            // The userscript expects a string or primitive usually.
             return Promise.resolve(defaultValue);
         };
-        window.chatClapper_GM_setValue = async (key, value) => {
-            console.log(`[Mock GM_setValue] Called with key: ${key}`, value);
+
+        window.GM_setValue = async (key, value) => {
+            console.log(`[Mock GM_setValue] Called with key: "${key}", value:`, value);
             // Could potentially store this in a variable for verification if needed
+            // Check if value is object, stringify if so? Userscript expects primitives or JSON string.
+            // The userscript itself does the JSON.stringify before calling GM_setValue usually,
+            // but the UI calls the bridged function which expects an object.
+            // For testing the script directly, GM_setValue likely expects string/primitive.
+            // Let's assume the script logic stringifies before calling GM_setValue if needed.
+            // Here we just log.
             return Promise.resolve();
         };
-        // Mock ready flag (Userscript sets this)
-        // window.chatClapper_isGmReady = true; // The userscript itself should set this
 
-        // Mock unsafeWindow for bridging if the script uses it directly
+        // Mock unsafeWindow for bridging - the userscript bridges TO this
         window.unsafeWindow = window;
+        // Initialize the properties the bridge service will set, so they exist.
+        window.unsafeWindow.chatClapper_GM_getValue = undefined;
+        window.unsafeWindow.chatClapper_GM_setValue = undefined;
+        window.unsafeWindow.chatClapper_isGmReady = undefined; // Script MUST set this to true
+        window.unsafeWindow.chatClapper_getRecentMessages = undefined;
 
-        console.log('[Mock InitScript] GM mocks installed.');
 
-        // --- Mock IndexedDB (Optional - Usually better to use real one) ---
-        // Using the real IndexedDB provided by the browser context is generally
-        // better for E2E testing fidelity. If you *need* fake-indexeddb here:
-        // import FakeIndexedDB from 'fake-indexeddb'; // Requires bundling or different setup
-        // window.indexedDB = new FakeIndexedDB();
+        console.log('[Mock InitScript] GM mocks installed on window.');
 
-    }, config); // Pass the config object to the init script
+    }, config); // Pass the test config object to the init script context
 
-    // Inject the actual userscript code AFTER the mocks are set up
+    // Inject the actual userscript code AFTER the mocks are set up in the init script
     await pageInstance.addInitScript(userscriptContent);
 
     console.log(`[Test Setup] Injected mocks and userscript.`);
@@ -206,7 +220,7 @@ describe('Chat Clapper Userscript E2E', () => {
         it('should load and find the chat container', async () => {
             // The beforeEach already waited for #chat-box
             const chatBox = page.locator('#chat-box');
-            await expect(chatBox).toBeVisible();
+            expect(await chatBox.isVisible()).toBe(true);
         });
 
         it('should clap a message from a target user after delay', async () => {
@@ -227,11 +241,11 @@ describe('Chat Clapper Userscript E2E', () => {
             const messageContent = lastMessage.locator('.content');
 
             // Assert content replacement
-            await expect(messageContent).toHaveText(expectedClapText);
+            expect(await messageContent.textContent()).toBe(expectedClapText);
 
             // Assert styling (opacity and font-style)
-            await expect(lastMessage).toHaveCSS('opacity', '0.5');
-            await expect(lastMessage).toHaveCSS('font-style', 'italic');
+            expect(await lastMessage.evaluate(el => getComputedStyle(el).opacity)).toBe('0.5');
+            expect(await lastMessage.evaluate(el => getComputedStyle(el).fontStyle)).toBe('italic');
         });
 
         it('should NOT clap a message from a non-target user', async () => {
@@ -245,11 +259,10 @@ describe('Chat Clapper Userscript E2E', () => {
             const messageContent = lastMessage.locator('.content');
 
             // Assert content is UNCHANGED
-            await expect(messageContent).toHaveText(originalMessage);
-
+            expect(await messageContent.textContent()).toBe(originalMessage);
             // Assert styling is NOT applied
-            await expect(lastMessage).not.toHaveCSS('opacity', '0.5');
-            await expect(lastMessage).not.toHaveCSS('font-style', 'italic');
+            expect(await lastMessage.evaluate(el => getComputedStyle(el).opacity)).not.toBe('0.5');
+            expect(await lastMessage.evaluate(el => getComputedStyle(el).fontStyle)).not.toBe('italic');
         });
 
         it('should store clapped message details in IndexedDB', async () => {
@@ -261,7 +274,7 @@ describe('Chat Clapper Userscript E2E', () => {
             await page.waitForTimeout(testConfig.global.delaySeconds * 1000 + 100);
 
             // Verify IndexedDB content
-            const dbMessages = await page.evaluate(async (dbName, storeName) => {
+            const dbMessages = await page.evaluate(async ({ dbName, storeName }) => {
                 return new Promise((resolve, reject) => {
                     const request = indexedDB.open(dbName);
                     request.onerror = (event) => reject(`DB open error: ${event.target.error}`);
@@ -278,18 +291,18 @@ describe('Chat Clapper Userscript E2E', () => {
                         }
                     };
                 });
-            }, 'chatClapperHistoryDB', 'blockedMessages');
+            }, { dbName: 'chatClapperHistoryDB', storeName: 'blockedMessages' });
 
             expect(dbMessages).toBeInstanceOf(Array);
-            expect(dbMessages).toHaveLength(1); // Only this message should be clapped in this test run
+            expect(dbMessages).toHaveLength(1);
 
             const storedMsg = dbMessages[0];
-            expect(storedMsg.author).toBe(targetUser.toLowerCase()); // Userscript stores lowercase
+            expect(storedMsg.author).toBe(targetUser.toLowerCase());
             expect(storedMsg.originalContent).toBe(originalMessage);
             expect(storedMsg.clappedContent).toBe(testConfig.global.replacementText);
             expect(storedMsg.site).toBe(siteKey);
             expect(storedMsg.timestamp).toBeTypeOf('number');
-            expect(storedMsg.id).toBeTypeOf('number'); // Should have auto-incremented ID
+            expect(storedMsg.id).toBeTypeOf('number');
         });
     });
 
@@ -315,8 +328,8 @@ describe('Chat Clapper Userscript E2E', () => {
             const lastMessage = page.locator('.message:last-child');
             const messageContent = lastMessage.locator('.content');
 
-            await expect(messageContent).toHaveText(testConfig.global.replacementText);
-            await expect(lastMessage).toHaveCSS('opacity', '0.5');
+            expect(await messageContent.textContent()).toBe(testConfig.global.replacementText);
+            expect(await lastMessage.evaluate(el => getComputedStyle(el).opacity)).toBe('0.5');
         });
 
         it('should NOT clap message from site 1 target user on site 2', async () => {
@@ -329,8 +342,8 @@ describe('Chat Clapper Userscript E2E', () => {
             const lastMessage = page.locator('.message:last-child');
             const messageContent = lastMessage.locator('.content');
 
-            await expect(messageContent).toHaveText(originalMessage); // Unchanged
-            await expect(lastMessage).not.toHaveCSS('opacity', '0.5');
+            expect(await messageContent.textContent()).toBe(originalMessage);
+            expect(await lastMessage.evaluate(el => getComputedStyle(el).opacity)).not.toBe('0.5');
         });
 
         it('should store site 2 clapped message with correct site key', async () => {
@@ -341,15 +354,14 @@ describe('Chat Clapper Userscript E2E', () => {
             await page.evaluate(([author, text]) => window.addChatMessage(author, text), [targetUser, originalMessage]);
             await page.waitForTimeout(testConfig.global.delaySeconds * 1000 + 100);
 
-            const dbMessages = await page.evaluate(async (dbName, storeName) => {
-                // (Same DB access logic as in site 1 test)
+            const dbMessages = await page.evaluate(async ({ dbName, storeName }) => { // Destructure args from object
                 return new Promise((resolve, reject) => {
-                    const request = indexedDB.open(dbName);
+                    const request = indexedDB.open(dbName); // Uses destructured dbName
                     request.onerror = (event) => reject(`DB open error: ${event.target.error}`);
                     request.onsuccess = (event) => {
                         const db = event.target.result;
                         try {
-                            const transaction = db.transaction([storeName], 'readonly');
+                            const transaction = db.transaction([storeName], 'readonly'); // Uses destructured storeName
                             const store = transaction.objectStore(storeName);
                             const getAllRequest = store.getAll();
                             getAllRequest.onerror = (event) => reject(`Store getAll error: ${event.target.error}`);
@@ -359,7 +371,7 @@ describe('Chat Clapper Userscript E2E', () => {
                         }
                     };
                 });
-            }, 'chatClapperHistoryDB', 'blockedMessages');
+            }, { dbName: 'chatClapperHistoryDB', storeName: 'blockedMessages' }); // Pass args as a single object
 
             expect(dbMessages).toHaveLength(1);
             const storedMsg = dbMessages[0];

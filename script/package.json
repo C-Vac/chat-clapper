@@ -3,12 +3,13 @@
   "version": "1.0.0",
   "main": "universal-chat-clapper.user.js",
   "directories": {
-    "test": "tests"
+    "test": "test"
   },
   "scripts": {
     "test": "vitest run",
     "test:watch": "vitest watch",
-    "test:e2e": "vitest run test/e2e.spec.js",
+    "test:e2e": "vitest run test/e2e.spec.js | tee tests.log 2>&1",
+    "test:e2e:watch": "vitest watch test/e2e.spec.js",
     "lint": "eslint . --ext .js,.ts",
     "format": "prettier --write ."
   },
