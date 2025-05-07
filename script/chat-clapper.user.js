@@ -11,6 +11,7 @@
 // @sandbox      JavaScript
 // @run-at       document-start
 // @noframes
+// @downloadURL  https://github.com/C-Vac/chat-clapper/raw/refs/heads/dev/script/chat-clapper.user.js
 // @updateURL    https://github.com/C-Vac/chat-clapper/raw/refs/heads/dev/script/chat-clapper.user.js
 // ==/UserScript==
 
