@@ -1,12 +1,11 @@
 // ui/src/services/configService.ts
 
-
 // --- TypeScript Declaration Augmentation ---
 // Tell TypeScript that our custom properties might exist on the window
 declare global {
     interface Window {
         // Config functions bridged from userscript
-        chatClapper_GM_getValue?: (key: string, defaultValue: Config) => Promise<Config>;
+        chatClapper_GM_getValue?: (key: string, defaultValue: any) => Promise<any>; // Allowing more generic types for the raw bridge
         chatClapper_GM_setValue?: (key: string, value: Config) => Promise<void>;
         chatClapper_isGmReady?: boolean;
 
@@ -16,9 +15,9 @@ declare global {
 }
 
 const Logger = {
-    log: (service: string, ...args: string[]) => { console.log(`[${service}]`, ...args); },
-    warn: (service: string, ...args: string[]) => { console.warn(`[${service}] [WARN]`, ...args); },
-    error: (service: string, ...args: string[]) => { console.error(`[${service}] [ERROR]`, ...args); }
+    log: (service: string, ...args: any[]) => { console.log(`[${service}]`, ...args); }, // Changed ...args to any[] for flexibility
+    warn: (service: string, ...args: any[]) => { console.warn(`[${service}] [WARN]`, ...args); },
+    error: (service: string, ...args: any[]) => { console.error(`[${service}] [ERROR]`, ...args); }
 }
 
 // --- Type Definitions ---
@@ -35,23 +34,23 @@ export type BlockedMessage = {
 
 // Define the structure of the configuration object
 export type Selector = {
-  container: string;
-  author: string;
-  content: string;
+    container: string;
+    author: string;
+    content: string;
 };
 
 export type Site = {
-  label?: string; // Optional display name for the UI
-  users: string[]; // List of usernames to block
-  selectors: Selector;
+    label?: string; // Optional display name for the UI
+    users: string[]; // List of usernames to block
+    selectors: Selector;
 };
 
 export type Config = {
-  global: {
-     replacementText: string; // Text to replace blocked messages with
-     delaySeconds: number; // Delay before replacing message
-  }
-  sites: Record<string, Site>; // Key is the URL pattern string (e.g., "https://*.example.com/*")
+    global: {
+        replacementText: string; // Text to replace blocked messages with
+        delaySeconds: number; // Delay before replacing message
+    }
+    sites: Record<string, Site>; // Key is the URL pattern string (e.g., "https://*.example.com/*")
 };
 // --- End Types ---
 
@@ -60,10 +59,10 @@ const CONFIG_KEY = 'chatClapperConfig'; // Must match userscript
 
 // Default configuration structure - used if nothing is loaded
 const DEFAULT_CONFIG: Config = {
-  global: {
-    replacementText: "[Message Clapped]",
-    delaySeconds: 3
-  },
+    global: {
+        replacementText: "[Message Clapped]",
+        delaySeconds: 3
+    },
   sites: {
     // Example structure - UI could add more
     // "https://www.example-chat.com/*": {
@@ -84,13 +83,13 @@ const DEFAULT_CONFIG: Config = {
  * @returns {boolean} True if the bridge seems ready, false otherwise.
  */
 export const checkGmReady = (): boolean => {
-  const isReady = typeof window !== 'undefined' &&
-                (window.chatClapper_isGmReady === true ||
-                 (typeof window.chatClapper_GM_getValue === 'function' &&
-                  typeof window.chatClapper_GM_setValue === 'function'));
+    const isReady = typeof window !== 'undefined' &&
+        (window.chatClapper_isGmReady === true ||
+            (typeof window.chatClapper_GM_getValue === 'function' &&
+                typeof window.chatClapper_GM_setValue === 'function'));
 
-  Logger.log(SERVICE_NAME, `checkGmReady() result = ${isReady}`);
-  return isReady;
+    Logger.log(SERVICE_NAME, `checkGmReady() result = ${isReady}`);
+    return isReady;
 };
 
 /**
@@ -100,36 +99,33 @@ export const checkGmReady = (): boolean => {
  * @returns {Promise<Config>} The loaded or default configuration object.
  */
 export const getConfig = async (): Promise<Config> => {
-  Logger.log(SERVICE_NAME, "getConfig() called.");
+    Logger.log(SERVICE_NAME, "getConfig() called.");
 
-  if (typeof window.chatClapper_GM_getValue !== 'function') {
-      const errorMsg = `${SERVICE_NAME}: FATAL - Bridged function window.chatClapper_GM_getValue not found! Cannot load config.`;
-      Logger.error(SERVICE_NAME, errorMsg);
-      // Throwing here forces the UI to handle the missing bridge explicitly
-      throw new Error(errorMsg);
-  }
-
-  try {
-    // Default value passed to GM_getValue is null to distinguish "not set" from "set to {}"
-    const storedValue = await window.chatClapper_GM_getValue(CONFIG_KEY, null);
-
-    // Validate the basic structure of the loaded config
-    if (storedValue && typeof storedValue === 'object' && storedValue.global && storedValue.sites) {
-      Logger.log(SERVICE_NAME, "Valid config loaded from storage:", storedValue);
-      // TODO: Add more thorough validation here if needed (e.g., check types of nested properties)
-      return storedValue as Config; // Assume structure is correct if basic checks pass
-    } else if (storedValue === null) {
-        Logger.warn(SERVICE_NAME, "No config found in storage (returned null). Returning default config.");
-        return JSON.parse(JSON.stringify(DEFAULT_CONFIG as Config)); // Return deep copy
-    } else {
-         Logger.warn(SERVICE_NAME, "Invalid config structure found in storage. Returning default config. Found:", storedValue);
-         return JSON.parse(JSON.stringify(DEFAULT_CONFIG as Config)); // Return deep copy
+    if (typeof window.chatClapper_GM_getValue !== 'function') {
+        const errorMsg = `${SERVICE_NAME}: FATAL - Bridged function window.chatClapper_GM_getValue not found! Cannot load config.`;
+        Logger.error(SERVICE_NAME, errorMsg);
+        throw new Error(errorMsg);
     }
-  } catch (e) {
-    Logger.error(SERVICE_NAME, "Error during getConfig execution:", e);
-    // Return a deep copy of the default config on any other error during the async call
-    return JSON.parse(JSON.stringify(DEFAULT_CONFIG));
-  }
+
+    try {
+        // Default value passed to GM_getValue is null to distinguish "not set" from "set to {}"
+        const storedValue = await window.chatClapper_GM_getValue(CONFIG_KEY, null) as Config | null | undefined; // Explicitly cast what we expect
+
+        // Validate the basic structure of the loaded config
+        if (storedValue && typeof storedValue === 'object' && storedValue.global && storedValue.sites) {
+            Logger.log(SERVICE_NAME, "Valid config loaded from storage:", JSON.stringify(storedValue)); // Stringify for better console object inspection
+            return storedValue as Config; // Assume structure is correct if basic checks pass
+        } else if (storedValue === null || storedValue === undefined) {
+            Logger.warn(SERVICE_NAME, "No config found in storage (GM_getValue returned null/undefined). Returning default config.");
+            return JSON.parse(JSON.stringify(DEFAULT_CONFIG)); // Return deep copy
+        } else {
+            Logger.warn(SERVICE_NAME, "Invalid config structure found in storage. Returning default config. Found:", JSON.stringify(storedValue));
+            return JSON.parse(JSON.stringify(DEFAULT_CONFIG)); // Return deep copy
+        }
+    } catch (e: any) { // Catch as any to access e.message
+        Logger.error(SERVICE_NAME, "Error during getConfig execution:", e.message, e);
+        return JSON.parse(JSON.stringify(DEFAULT_CONFIG));
+    }
 };
 
 /**
@@ -139,29 +135,27 @@ export const getConfig = async (): Promise<Config> => {
  * @returns {Promise<void>}
  */
 export const setConfig = async (configObject: Config): Promise<void> => {
-  Logger.log(SERVICE_NAME, "setConfig() called with:", configObject);
+    Logger.log(SERVICE_NAME, "setConfig() called with:", JSON.stringify(configObject));
 
-   if (typeof window.chatClapper_GM_setValue !== 'function') {
-       const errorMsg = `${SERVICE_NAME}: FATAL - Bridged function window.chatClapper_GM_setValue not found! Cannot save config.`;
-       Logger.error(SERVICE_NAME, errorMsg);
-       throw new Error(errorMsg); // Throw to let the UI know saving is impossible
-  }
+    if (typeof window.chatClapper_GM_setValue !== 'function') {
+        const errorMsg = `${SERVICE_NAME}: FATAL - Bridged function window.chatClapper_GM_setValue not found! Cannot save config.`;
+        Logger.error(SERVICE_NAME, errorMsg);
+        throw new Error(errorMsg);
+    }
 
-  try {
-    // Userscript expects the object directly
-    await window.chatClapper_GM_setValue(CONFIG_KEY, configObject);
-    Logger.log(SERVICE_NAME, "Config saved successfully via bridge.");
-  } catch (e) {
-    Logger.error(SERVICE_NAME, "Error during setConfig execution via bridge:", e);
-    // Rethrow the error so the calling UI component knows the save failed
-    throw e;
-  }
+    try {
+        await window.chatClapper_GM_setValue(CONFIG_KEY, JSON.parse(JSON.stringify(configObject))); // Ensure a clean object is passed
+        Logger.log(SERVICE_NAME, "Config saved successfully via bridge.");
+    } catch (e: any) {
+        Logger.error(SERVICE_NAME, "Error during setConfig execution via bridge:", e.message, e);
+        throw e; // Rethrow the error
+    }
 };
 
 /**
  * Retrieves recent blocked message history from the userscript via the bridge.
  * Throws an error if the required getRecentMessages bridge function is missing.
- * Returns an empty array if the retrieval fails for other reasons.
+ * Returns an empty array if the retrieval fails for other reasons or response is invalid.
  * @param {number} [limit=10] - The maximum number of messages to retrieve.
  * @returns {Promise<BlockedMessage[]>} A promise resolving to an array of blocked messages.
  */
@@ -171,21 +165,20 @@ export const getMessageHistory = async (limit: number = 10): Promise<BlockedMess
     if (typeof window.chatClapper_getRecentMessages !== 'function') {
         const errorMsg = `${SERVICE_NAME}: FATAL - Bridged function window.chatClapper_getRecentMessages not found! Cannot load history.`;
         Logger.error(SERVICE_NAME, errorMsg);
-        throw new Error(errorMsg); // Throw to let the UI know history is unavailable
+        throw new Error(errorMsg);
     }
 
     try {
         const messages = await window.chatClapper_getRecentMessages(limit);
-        Logger.log(SERVICE_NAME, `Retrieved ${messages.length} history messages via bridge.`);
-        // Perform basic validation if necessary (e.g., check if it's an array)
+        Logger.log(SERVICE_NAME, `Retrieved ${messages ? messages.length : 'null/undefined'} history messages via bridge.`);
+        
         if (!Array.isArray(messages)) {
             Logger.warn(SERVICE_NAME, `Received non-array response from chatClapper_getRecentMessages. Returning empty array. Response:`, messages);
             return [];
         }
         return messages;
-    } catch (e) {
-        Logger.error(SERVICE_NAME, "Error during getMessageHistory execution via bridge:", e);
-        // Return empty array on error to allow UI to render gracefully
+    } catch (e: any) {
+        Logger.error(SERVICE_NAME, "Error during getMessageHistory execution via bridge:", e.message, e);
         return [];
     }
 };
