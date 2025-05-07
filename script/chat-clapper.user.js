@@ -21,7 +21,8 @@
     // --- Constants ---
     const CONFIG_KEY = 'chatClapperConfig';
     const DB_NAME = 'chatClapperHistoryDB';
-    const STORE_NAME = 'blockedMessages';
+    const GLOBAL_RECENT_HISTORY_KEY = 'chatClapperGlobalRecentHistory';
+    const MAX_GLOBAL_RECENT_MESSAGES = 100; const STORE_NAME = 'blockedMessages';
     const CONFIG_UI_URL_PREFIX = 'http://localhost:5173';
     const LOG_PREFIX = '[ChatClapper]';
 
@@ -38,6 +39,63 @@
     // --- Database Service ---
     const DatabaseService = {
         db: null,
+
+        GlobalHistoryManager: {
+            /**
+             * Adds a message to the global recent history list in GM_storage.
+             * Keeps the list pruned to MAX_GLOBAL_RECENT_MESSAGES.
+             * Expects messageData to be a complete BlockedMessage object (including an id from local DB).
+             */
+            async addMessageToGlobalRecentHistory(messageData, gmGetValue, gmSetValue) {
+                if (typeof gmGetValue !== 'function' || typeof gmSetValue !== 'function') {
+                    Logger.fail("GM_getValue/setValue not available for global recent history.");
+                    return;
+                }
+                try {
+                    let globalRecentHistory = await gmGetValue(GLOBAL_RECENT_HISTORY_KEY, []);
+                    if (!Array.isArray(globalRecentHistory)) {
+                        Logger.warn("Global recent history from GM was not an array, resetting.");
+                        globalRecentHistory = [];
+                    }
+
+                    // Add the new message (which should already have its ID from local DB and timestamp)
+                    globalRecentHistory.unshift(messageData); // Add to the beginning
+
+                    // Prune to keep only the last MAX_GLOBAL_RECENT_MESSAGES
+                    if (globalRecentHistory.length > MAX_GLOBAL_RECENT_MESSAGES) {
+                        globalRecentHistory = globalRecentHistory.slice(0, MAX_GLOBAL_RECENT_MESSAGES);
+                    }
+
+                    await gmSetValue(GLOBAL_RECENT_HISTORY_KEY, globalRecentHistory);
+                    Logger.success(`Message ID ${messageData.id} added to global GM history. Count: ${globalRecentHistory.length}`);
+                } catch (e) {
+                    Logger.fail("Error updating global GM recent history:", e);
+                }
+            },
+
+            /**
+             * Retrieves recent messages from the global list in GM_storage.
+             * The list in GM_storage is already sorted with the newest first.
+             */
+            async getGlobalRecentMessages(limit = 10, gmGetValue) {
+                if (typeof gmGetValue !== 'function') {
+                    Logger.fail("GM_getValue not available for global recent history retrieval.");
+                    return [];
+                }
+                try {
+                    const globalRecentHistory = await gmGetValue(GLOBAL_RECENT_HISTORY_KEY, []);
+                    if (!Array.isArray(globalRecentHistory)) {
+                        Logger.warn("Global recent history from GM is not an array, returning empty.");
+                        return [];
+                    }
+                    // The list is stored newest first, so slice directly
+                    return globalRecentHistory.slice(0, limit);
+                } catch (e) {
+                    Logger.fail("Error retrieving global recent messages from GM:", e);
+                    return [];
+                }
+            }
+        },
 
         async initDB() {
             return new Promise((resolve, reject) => {
@@ -407,15 +465,32 @@
                                                 clappedContent: replacementText,
                                                 site: siteKey,
                                             };
-                                            // Add to DB (timestamp added internally by dbService)
-                                            const messageId = await dbService.addBlockedMessage(messageDetails);
+                                            // 1. Add to local per-site IndexedDB (this also adds a timestamp)
+                                            //    This `addBlockedMessage` should return the ID it generated.
+                                            const messageIdFromLocalDB = await DatabaseService.addBlockedMessage(messageDetails);
 
-                                            // Dispatch event with full details including ID and timestamp
-                                            domService.dispatchEvent('chatClapperMessageBlocked', {
+                                            // 2. Prepare the consistent payload for global history and event dispatch
+                                            const consistentTimestamp = Date.now(); // Use a single timestamp for this event cycle
+                                            const messagePayload = {
                                                 ...messageDetails,
-                                                id: messageId,
-                                                timestamp: Date.now() // Add current timestamp for event consistency
-                                            });
+                                                id: messageIdFromLocalDB, // Use the ID from the per-site IndexedDB
+                                                timestamp: consistentTimestamp
+                                            };
+
+                                            // 3. Add to global recent history (passing actual GM_getValue, GM_setValue)
+                                            //    Ensure GM_getValue and GM_setValue are accessible here.
+                                            //    If ObserverService doesn't have direct access, you might need to pass them
+                                            //    or call a method on a service that does.
+                                            if (typeof GM_getValue === 'function' && typeof GM_setValue === 'function') {
+                                                await DatabaseService.GlobalHistoryManager.addMessageToGlobalRecentHistory(messagePayload, GM_getValue, GM_setValue);
+                                            } else {
+                                                Logger.warn("GM functions not directly available in ObserverService to update global history.");
+                                            }
+
+                                            // 4. Dispatch event with the consistent payload
+                                            DomService.dispatchEvent('chatClapperMessageBlocked', messagePayload);
+
+
                                         } catch (error) {
                                             Logger.fail("Error storing message or dispatching event after clap:", error);
                                         }
@@ -467,12 +542,12 @@
 
         // --- 2. Check if on Config UI Page ---
         if (window.location.href.startsWith(CONFIG_UI_URL_PREFIX)) {
-            Logger.warn("On config UI page, initializing DB and exposing getter only.");
+            Logger.warn("On config UI page, initializing DB and exposing global history getter.");
             try {
                 // Init DB for potential history viewing on config page
                 await DatabaseService.initDB();
                 // Expose the getter, binding `this` to DatabaseService
-                BridgeService.exposeDbGetter(DatabaseService.getRecentMessages.bind(DatabaseService));
+                BridgeService.exposeDbGetter((limit) => DatabaseService.GlobalHistoryManager.getGlobalRecentMessages(limit, GM_getValue));
                 Logger.info("DB initialized and getter exposed for config UI.");
             } catch (error) {
                 Logger.fail("Failed to initialize DB for config UI:", error);
