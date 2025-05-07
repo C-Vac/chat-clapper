@@ -2,8 +2,8 @@
 import React, { useState, useEffect, Suspense, ErrorInfo } from "react";
 import "./App.css";
 // Import service functions and types
-import { checkGmReady, setConfig, getConfig } from "./services/configService";
-import type { Config } from "./services/configService"; // Ensure Config is exported from configService
+import { checkGmReady, setConfig, getConfig, getMessageHistory } from "./services/configService";
+import type { Config, BlockedMessage } from "./services/configService"; // Ensure Config is exported from configService
 
 // Import the new candidate manifest and types
 import { candidateManifest, CandidateKey } from "./candidateComponents"; // Adjust path if needed
@@ -14,7 +14,7 @@ import { candidateManifest, CandidateKey } from "./candidateComponents"; // Adju
 export interface AppProps {
   getConfig: () => Promise<Config>;
   setConfig: (config: Config) => Promise<void>;
-  // If you add getRecentBlockedMessages, include it here
+  getMessageHistory: (limit: number) => Promise<BlockedMessage[]>;
 }
 // --- End Props Definition ---
 
@@ -154,6 +154,7 @@ const App: React.FC = () => {
             <SelectedLazyComponent
               getConfig={getConfig}
               setConfig={setConfig}
+              getMessageHistory={getMessageHistory}
             />
           </Suspense>
         </StandardErrorBoundary>
