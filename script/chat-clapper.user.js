@@ -2,7 +2,7 @@
 // @name         Chat Clapper 3000 EXPERIMENTAL
 // @author       GG, Goblini, contrib. Big Ounce, misc goblins, et. al
 // @namespace    http://tampermonkey.net/
-// @version      1.0
+// @version      1.0.1
 // @description  Clap goofy chatters on multiple sites using dynamic config from GM_getValue
 // @match        *://*/*
 // @grant        GM_getValue
@@ -542,18 +542,58 @@
 
         // --- 2. Check if on Config UI Page ---
         if (window.location.href.startsWith(CONFIG_UI_URL_PREFIX)) {
-            Logger.warn("On config UI page, initializing DB and exposing global history getter.");
-            try {
-                // Init DB for potential history viewing on config page
-                await DatabaseService.initDB();
-                // Expose the getter, binding `this` to DatabaseService
-                BridgeService.exposeDbGetter((limit) => DatabaseService.GlobalHistoryManager.getGlobalRecentMessages(limit, GM_getValue));
-                Logger.info("DB initialized and getter exposed for config UI.");
-            } catch (error) {
-                Logger.fail("Failed to initialize DB for config UI:", error);
+            Logger.info("Dashboard UI instance: Initializing listeners and getters.");
+
+            // Set up listener for changes to the global recent history
+            if (typeof GM_addValueChangeListener === 'function' &&
+                typeof DomService !== 'undefined' &&
+                typeof DomService.dispatchEvent === 'function') {
+
+                Logger.info(`Dashboard UI: Setting up GM_addValueChangeListener for key: ${GLOBAL_RECENT_HISTORY_KEY}`);
+
+                GM_addValueChangeListener(GLOBAL_RECENT_HISTORY_KEY, (keyName, oldValue, newValue, remote) => {
+                    if (remote && Array.isArray(newValue) && newValue.length > 0) {
+                        // Assuming GlobalHistoryManager.addMessageToGlobalRecentHistory PREPENDS the newest message,
+                        // so newValue[0] is the latest one.
+                        const newestMessage = newValue[0];
+
+                        // OPTIONAL: A check to see if this message is truly "newer" than what might have been last processed.
+                        // This can be tricky if oldValue is also a large array.
+                        // For simplicity, we'll assume any remote update with content means the newest message is relevant.
+                        // If your `addMessageToGlobalRecentHistory` ensures the object reference changes or has a nonce,
+                        // even just checking `newValue !== oldValue` could be part of it, but `remote` is key.
+
+                        Logger.info('Dashboard UI: Detected remote update to global history. Newest message:', newestMessage);
+
+                        // Dispatch the event LOCALLY on the dashboard's window.
+                        // Your React UI is already listening for this.
+                        DomService.dispatchEvent('chatClapperMessageBlocked', newestMessage);
+
+                    } else if (remote) {
+                        Logger.warn('Dashboard UI: Global history key updated by remote, but newValue is not a non-empty array or is problematic.');
+                    }
+                    // No action if not remote, as the dashboard itself shouldn't be modifying this key directly.
+                });
+            } else {
+                Logger.warn("Dashboard UI: GM_addValueChangeListener or DomService.dispatchEvent is not available. Real-time message updates from other tabs will not work.");
             }
-            // Stop further execution for the main clapping logic
-            return;
+
+            // Expose the getter for the dashboard to fetch the initial/bulk history
+            // This uses GlobalHistoryManager.getGlobalRecentMessages which reads from GLOBAL_RECENT_HISTORY_KEY
+            if (typeof GM_getValue === 'function' && typeof GlobalHistoryManager !== 'undefined') {
+                BridgeService.exposeDbGetter(
+                    (limit) => DatabaseService.GlobalHistoryManager.getGlobalRecentMessages(limit, GM_getValue)
+                );
+                Logger.info("Global recent history getter (via GM_getValue) exposed for config UI.");
+            } else {
+                Logger.fail("GM_getValue or GlobalHistoryManager not available on config page to expose global history getter.");
+                BridgeService.exposeDbGetter(() => Promise.resolve([])); // Fallback: UI gets an empty list
+            }
+
+            // Optional: If the config page used its own IndexedDB for other settings, init it.
+            // await DatabaseService.initDB(); 
+
+            return; // Stop further execution of the main clapping logic on the config page
         }
 
         Logger.info("Not on config UI page, proceeding with full initialization.");

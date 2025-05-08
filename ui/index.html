@@ -3,16 +3,41 @@
 
 <head>
   <meta charset="UTF-8" />
-  <link rel="icon" type="image/svg+xml" href="/vite.svg" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Chat Clapper 3000</title>
   <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    /* Optional: Add a custom scrollbar style for better aesthetics if desired */
+    /* For Webkit browsers */
+    ::-webkit-scrollbar {
+      width: 8px;
+      height: 8px;
+    }
 
+    ::-webkit-scrollbar-track {
+      background: #f1f1f1;
+      border-radius: 10px;
+    }
+
+    ::-webkit-scrollbar-thumb {
+      background: #c7c7c7;
+      border-radius: 10px;
+    }
+
+    ::-webkit-scrollbar-thumb:hover {
+      background: #a3a3a3;
+    }
+
+    /* For Firefox */
+    /* Firefox scrollbar styling is more limited, this provides basic width/color */
+    * {
+      scrollbar-width: thin;
+      scrollbar-color: #c7c7c7 #f1f1f1;
+    }
+  </style>
 </head>
 
 <body>
   <div id="root"></div>
   <script type="module" src="/src/main.tsx"></script>
 </body>
-
-</html>
