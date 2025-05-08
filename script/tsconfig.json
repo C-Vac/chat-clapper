@@ -12,7 +12,12 @@
             "node"
         ],
         "outDir": "./dist",
-        "rootDir": "."
+        "rootDir": ".",
+        "lib": [
+            "dom",
+            "ESNext"
+        ],
+        "jsx": "react-jsx"
     },
     "include": [
         "test/**/*.ts",
