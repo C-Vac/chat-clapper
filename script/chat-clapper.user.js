@@ -2,7 +2,7 @@
 // @name         Chat Clapper 3000 EXPERIMENTAL
 // @author       GG, Goblini, contrib. Big Ounce, misc goblins, et. al
 // @namespace    http://tampermonkey.net/
-// @version      1.0.5
+// @version      1.0.6
 // @description  Clap goofy chatters on multiple sites using dynamic config from GM_getValue
 // @match        *://*/*
 // @grant        GM_getValue
