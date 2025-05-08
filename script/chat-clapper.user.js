@@ -580,7 +580,7 @@
 
             // Expose the getter for the dashboard to fetch the initial/bulk history
             // This uses GlobalHistoryManager.getGlobalRecentMessages which reads from GLOBAL_RECENT_HISTORY_KEY
-            if (typeof GM_getValue === 'function' && typeof GlobalHistoryManager !== 'undefined') {
+            if (typeof GM_getValue === 'function' && typeof DatabaseService.GlobalHistoryManager !== 'undefined') {
                 BridgeService.exposeDbGetter(
                     (limit) => DatabaseService.GlobalHistoryManager.getGlobalRecentMessages(limit, GM_getValue)
                 );
