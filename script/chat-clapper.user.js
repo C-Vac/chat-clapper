@@ -2,7 +2,7 @@
 // @name         Chat Clapper 3000 EXPERIMENTAL
 // @author       GG, Goblini, contrib. Big Ounce, misc goblins, et. al
 // @namespace    http://tampermonkey.net/
-// @version      1.0.3
+// @version      1.0.4
 // @description  Clap goofy chatters on multiple sites using dynamic config from GM_getValue
 // @match        *://*/*
 // @grant        GM_getValue
@@ -392,7 +392,7 @@
 
         dispatchEvent(eventName, detail) {
             try {
-                Logger.debug(`Dispatching event "${eventName}"`);
+                // Logger.debug(`Dispatching event "${eventName}"`);
                 const event = new CustomEvent(eventName, { detail });
                 window.dispatchEvent(event);
             } catch (error) {
@@ -550,24 +550,13 @@
                 typeof DomService !== 'undefined' &&
                 typeof DomService.dispatchEvent === 'function') {
 
-                Logger.info(`Dashboard UI: Setting up GM_addValueChangeListener for key: ${GLOBAL_RECENT_HISTORY_KEY}`);
+                // Logger.debug(`Dashboard UI: Setting up GM_addValueChangeListener for key: ${GLOBAL_RECENT_HISTORY_KEY}`);
 
                 GM_addValueChangeListener(GLOBAL_RECENT_HISTORY_KEY, (keyName, oldValue, newValue, remote) => {
                     if (remote && Array.isArray(newValue) && newValue.length > 0) {
-                        // Assuming GlobalHistoryManager.addMessageToGlobalRecentHistory PREPENDS the newest message,
-                        // so newValue[0] is the latest one.
                         const newestMessage = newValue[0];
+                        // Logger.debug('Dashboard UI: Detected remote update to global history. Newest message:', newestMessage);
 
-                        // OPTIONAL: A check to see if this message is truly "newer" than what might have been last processed.
-                        // This can be tricky if oldValue is also a large array.
-                        // For simplicity, we'll assume any remote update with content means the newest message is relevant.
-                        // If your `addMessageToGlobalRecentHistory` ensures the object reference changes or has a nonce,
-                        // even just checking `newValue !== oldValue` could be part of it, but `remote` is key.
-
-                        Logger.info('Dashboard UI: Detected remote update to global history. Newest message:', newestMessage);
-
-                        // Dispatch the event LOCALLY on the dashboard's window.
-                        // Your React UI is already listening for this.
                         DomService.dispatchEvent('chatClapperMessageBlocked', newestMessage);
 
                     } else if (remote) {
@@ -596,8 +585,6 @@
 
             return; // Stop further execution of the main clapping logic on the config page
         }
-
-        Logger.info("Not on config UI page, proceeding with full initialization.");
 
         // --- 3. Initialize Database ---
         try {
@@ -656,7 +643,7 @@
             DomService
         );
 
-        Logger.info("Chat Clapper initialization complete.");
+        Logger.success("Chat Clapper initialization complete.");
 
         if (typeof unsafeWindow !== 'undefined') {
             unsafeWindow.chatClapper_isGmReady = true;
