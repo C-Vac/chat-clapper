@@ -24,7 +24,7 @@
     const DB_NAME = 'chatClapperHistoryDB';
     const GLOBAL_RECENT_HISTORY_KEY = 'chatClapperGlobalRecentHistory';
     const MAX_GLOBAL_RECENT_MESSAGES = 100; const STORE_NAME = 'blockedMessages';
-    const CONFIG_UI_URL_PREFIX = 'http://localhost:5173';
+    const CONFIG_UI_URL_PREFIX = 'https://gob.lan/chat-clapper/';
     const LOG_PREFIX = '[ChatClapper]';
 
     // --- Logger ---
