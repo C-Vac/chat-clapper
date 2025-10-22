@@ -32,3 +32,5 @@ coverage/
 .DS_Store
 Thumbs.db
 llm/
+
+# Large data files from dev tools and extensions
