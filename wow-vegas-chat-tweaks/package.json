@@ -1,0 +1,43 @@
+{
+  "name": "wow-vegas-chat-tweaks",
+  "version": "1.0.0",
+  "description": "Consolidated Tampermonkey scripts to enhance WOW Vegas chat experience.",
+  "main": "wow-vegas-chat-tweaks.user.js",
+  "type": "module",
+  "scripts": {
+    "test": "vitest run --config ./vitest.config.js",
+    "test:watch": "vitest watch",
+    "test:e2e": "vitest run test/e2e.spec.js | tee test.log 2>&1",
+    "test:e2e:watch": "vitest watch test/e2e.spec.js",
+    "lint": "eslint . --ext .js,.ts",
+    "format": "prettier --write ."
+  },
+  "keywords": [
+    "tampermonkey",
+    "wowvegas",
+    "chat",
+    "userscript"
+  ],
+  "author": "GG OCDware",
+  "license": "ISC",
+  "devDependencies": {
+    "@eslint/js": "^9.38.0",
+    "@types/express": "*",
+    "@types/node": "*",
+    "@typescript-eslint/eslint-plugin": "^8.46.2",
+    "@typescript-eslint/parser": "^8.46.1",
+    "eslint": "^9.38.0",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-prettier": "^5.5.4",
+    "express": "*",
+    "fake-indexeddb": "*",
+    "globals": "*",
+    "jsdom": "*",
+    "playwright": "^1.56.1",
+    "prettier": "^3.6.2",
+    "ts-node": "*",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "*",
+    "vitest": "^3.2.4"
+  }
+}

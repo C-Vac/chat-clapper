@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 // Assuming ConfigService is exported or accessible
-import { ConfigService } from './../chat-clapper.user.js';
+import { ConfigService } from '../chat-clapper.user.js';
 
 describe('ConfigService', () => {
     let mockGmGetValue;

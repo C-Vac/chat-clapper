@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { ObserverService } from './../chat-clapper.user.js';
+import { ObserverService } from '../chat-clapper.user.js';
 
 const mockDbService = {
     addBlockedMessage: vi.fn(),

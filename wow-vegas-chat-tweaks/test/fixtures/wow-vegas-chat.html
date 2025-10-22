@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WOW Vegas Chat</title>
+  <style>
+    body {
+      font-family: sans-serif;
+    }
+
+    #chat-box {
+      border: 1px solid #ccc;
+      height: 300px;
+      overflow-y: scroll;
+      padding: 10px;
+      margin-bottom: 10px;
+    }
+
+    .message {
+      margin-bottom: 5px;
+      padding: 3px;
+      border-bottom: 1px dotted #eee;
+    }
+
+    .message .author {
+      font-weight: bold;
+      color: blue;
+    }
+
+    .message .content {
+      margin-left: 5px;
+    }
+
+    /* Add any specific WOW Vegas chat styles here if known */
+  </style>
+</head>
+
+<body>
+  <h1>WOW Vegas Chatroom</h1>
+  <div id="chat-box">
+    <!-- Messages will be added dynamically -->
+  </div>
+  <button id="add-msg-btn">Add Test Message</button>
+
+  <script>
+    const chatBox = document.getElementById('chat-box');
+    let messageCounter = 0;
+
+    // Function to add a message - tests can call this via page.evaluate
+    function addChatMessage(author, text) {
+      const msgDiv = document.createElement('div');
+      msgDiv.classList.add('message');
+      msgDiv.id = `msg-${messageCounter++}`;
+
+      const authorSpan = document.createElement('span');
+      authorSpan.classList.add('author');
+      authorSpan.textContent = `${author}:`;
+
+      const contentSpan = document.createElement('span');
+      contentSpan.classList.add('content');
+      contentSpan.textContent = text;
+
+      msgDiv.appendChild(authorSpan);
+      msgDiv.appendChild(contentSpan);
+      chatBox.appendChild(msgDiv);
+      // Scroll to bottom
+      chatBox.scrollTop = chatBox.scrollHeight;
+      console.log(`[Fixture] Added message: ${author} - ${text}`);
+    }
+
+    // Make it available globally for easy calling from Playwright
+    window.addChatMessage = addChatMessage;
+
+    // Example button for manual testing
+    document.getElementById('add-msg-btn')?.addEventListener('click', () => {
+      const users = ['Player1', 'Player2', 'Admin', 'GG_OCDware'];
+      const messages = ['Hello everyone!', 'Good luck!', 'Welcome to WOW Vegas!', 'Testing my tweaks!'];
+      addChatMessage(
+        users[Math.floor(Math.random() * users.length)],
+        messages[Math.floor(Math.random() * messages.length)]
+      );
+    });
+
+    console.log("[Fixture] WOW Vegas Chat page script loaded.");
+  </script>
+</body>
+
+</html>
